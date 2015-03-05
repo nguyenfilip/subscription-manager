@@ -1,132 +1,37 @@
 #!/bin/bash
 
-METHODS="
-/activation_keys
-/activation_keys/{activation_key_id}
-/activation_keys/{activation_key_id}/pools
-/activation_keys/{activation_key_id}/pools/{pool_id}
-/admin/init
-/atom
-/serials/{serial_id}
-/serials
-/cdn
-/consumers
-/consumers/{consumer_uuid}
-/consumers/{consumer_uuid}/entitlements/dry-run
-/consumers/{consumer_uuid}/certificates
-/consumers/{consumer_uuid}/export
-/consumers/{consumer_uuid}/compliance
-/consumers/{consumer_uuid}/content_overrides
-/consumers/compliance
-/consumers/{consumer_uuid}
-/consumers/{consumer_uuid}/events
-/consumers/{consumer_uuid}/certificates/serials
-/consumers/{consumer_uuid}/certificates
-/consumers/{consumer_uuid}/guests
-/consumers/{consumer_uuid}/guestids
-/consumers/{consumer_uuid}/host
-/consumers/{consumer_uuid}/owner
-/consumers/{consumer_uuid}/release
-/consumers/{consumer_uuid}/entitlements
-/consumers/{consumer_uuid}/certificates
-/consumers/{consumer_uuid}/deletionrecord
-/consumers/{consumer_uuid}/entitlements/{dbid}
-/consumers/{consumer_uuid}/entitlements
-/consumers/{consumer_uuid}/certificates/{serial}
-/consumers/{consumer_uuid}
-/consumertypes
-/consumertypes/{id}
-/content
-/content/{content_id}
-/crl
-/deleted_consumers
-/distributor_versions
-/distributor_versions/{id}
-/distributor_versions
-/distributor_versions/{id}
-/entitlements/{dbid}
-/entitlements/{dbid}/upstream_cert
-/entitlements/consumer/{consumer_uuid}/product/{product_id}
-/entitlements
-/entitlements/product/{product_id}
-/entitlements/{dbid}
-/entitlements/{entitlement_id}
-/environments/{env_id}/consumers
-/environments/{env_id}
-/environments/{env_id}/content
-/events/{uuid}
-/events
-/hypervisors
-/jobs/scheduler
-/jobs/{job_id}
-/jobs
-/jobs/scheduler
-/migrations
-/owners/{owner_key}/activation_keys
-/owners/{owner_key}/environments
-/owners
-/owners/{owner_key}
-/owners/{owner_key}/subscriptions
-/owners/{owner_key}/uebercert
-/owners/{owner_key}/consumers/{consumer_uuid}/atom
-/owners/{owner_key}/events
-/owners/{owner_key}/imports
-/owners/{owner_key}/atom
-/owners/{owner_key}/info
-/owners/{owner_key}/pools
-/owners/{owner_key}/statistics/{qtype}/{vtype}
-/owners/{owner_key}/subscriptions
-/owners/{owner_key}/uebercert
-/owners/{owner_key}/upstream_consumers
-/owners/{owner_key}/entitlements
-/owners/{owner_key}/imports
-/owners
-/owners/{owner_key}/environments
-/owners/{owner_key}/activation_keys
-/owners/{owner_key}/consumers
-/owners/{owner_key}/entitlements
-/owners/{owner_key}/servicelevels
-/owners/{owner_key}/subscriptions
-/owners/{owner_key}/imports
-/owners/subscriptions
-/pools/{pool_id}
-/pools/{pool_id}/entitlements
-/pools/{pool_id}/statistics/{vtype}
-/pools
-/products
-/products/owners
-/products/{product_uuid}/content/{content_id}
-/products/{product_uuid}/reliance/{rely_product_id}
-/products/{product_uuid}
-/products/{product_uuid}/certificate
-/products/{prod_id}/statistics
-/products/{product_uuid}/subscriptions
-/products/{product_uuid}/content/{content_id}
-/products/{product_uuid}/reliance/{rely_product_uuid}
-/roles/{role_id}/permissions
-/roles/{role_id}/users/{username}
-/roles/{role_id}/users/{username}
-/roles
-/roles/{role_id}/permissions/{perm_id}
-/roles/{role_id}
-/rules
-/serials
-/statistics/generate
-/status
-/subscriptions
-/subscriptions/{subscription_id}/cert
-/subscriptions/{subscription_id}
-/users
-/users/{username}
-/users/{username}/roles
-/users/{username}/owners
-/users/{username}"
+# To generate new api completions, run the gen-api-completions.py script
 
+# If set, choose a different set of completions.
+# 'hosted' vs 'test' or 'v1.0' vs 'v2.0', etc
+SMURL_URL=${SMURL_URL:-default}
+
+_read_api()
+{
+    local GET_METHODS
+    local POST_METHODS
+    local HEAD_HETHODS
+    local PUT_METHODS
+    local DELETE_METHODS
+    local completions_dir="${HOME}/.smurl/completions/${SMURL_URL}"
+    if [[ -d "${completions_dir}" ]] ; then
+       mapfile GET_METHODS < "${completions_dir}/candlepin-api-completions-GET"
+       mapfile POST_METHODS < "${completions_dir}/candlepin-api-completions-POST"
+       mapfile PUT_METHODS < "${completions_dir}/candlepin-api-completions-PUT"
+       mapfile DELETE_METHODS < "${completions_dir}/candlepin-api-completions-DELETE"
+       mapfile HEAD_METHODS < "${completions_dir}/candlepin-api-completions-HEAD"
+    fi
+    ALL_METHODS="${GET_METHODS[*]} ${POST_METHODS[*]} ${PUT_METHODS[*]} ${DELETE_METHODS[*]} ${HEAD_METHODS[*]}"
+}
 
 _smurl_api()
 {
+    # we can/should check comp_words for the http verb, and filter to
+    # a subset of the methods...
+    #echo "sdfasdf ${ALL_METHODS[*]}"
+    #echo "comp_words ${COMP_WORDS[*]} prev ${prev} cur ${cur}"
     local opts="--method --auth -d -X --request --username --password --org"
-    local all_comp="${opts} ${METHODS}"
+    local all_comp="${opts} ${ALL_METHODS}"
     COMPREPLY=($(compgen -W "${all_comp}" -- ${1}))
 }
 
@@ -189,4 +94,5 @@ _smurl()
 
 }
 
+_read_api
 complete -F _smurl -o default smurl

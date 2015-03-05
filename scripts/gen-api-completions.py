@@ -16,6 +16,7 @@
 # api info is written to candlepin/server/target/candlepin_methods.json
 #
 
+import os
 import simplejson as json
 import sys
 from collections import defaultdict
@@ -37,8 +38,9 @@ def method_paths(method_list):
     return [x['url'] for x in method_list]
 
 
-def write_completions(verb, method_list):
-    completions_filename = "candlepin-api-completions-%s" % verb
+def write_completions(verb, method_list, completions_dir):
+    completions_filename = os.path.join(completions_dir,
+                                        "candlepin-api-completions-%s" % verb)
     completions_fp = open(completions_filename, 'w')
     paths = method_paths(method_list)
     completions_fp.write('\n'.join(paths))
@@ -46,6 +48,7 @@ def write_completions(verb, method_list):
 
 
 def main():
+    target_dir = os.environ['SMURL_HOST'] or None
     api_json_filename = sys.argv[1]
     api_json_fp = open(api_json_filename, 'r')
 
@@ -53,14 +56,18 @@ def main():
 
     verb_map = defaultdict(list)
 
+    home_dir = os.path.expanduser("~/.smurl/completions")
+    completions_dir = os.path.join(home_dir, target_dir)
     #pprint.pprint([(x['url'], x['verifiedParams']) for x in api])
 
     verb_map = find_verbs(verb_map, api)
 
     all_paths = []
     for verb in verb_map:
+        if target_dir:
+            write_completions(verb, verb_map[verb], completions_dir)
+
         all_paths += method_paths(verb_map[verb])
-        #write_completions(verb, verb_map[verb])
 
     completions = sorted(set(all_paths))
     for completion in completions:
