@@ -171,8 +171,7 @@ class MainWindow(widgets.SubmanBaseWidget):
 
         self.system_facts_dialog = factsgui.SystemFactsDialog(self.facts)
 
-        self.registration_dialog = registergui.RegisterScreen(self.backend, self.facts,
-                                                              self._get_window())
+        self.registration_dialog = registergui.RegisterDialog(self.backend, self.facts)
 
         self.preferences_dialog = PreferencesDialog(self.backend,
                                                     self._get_window())

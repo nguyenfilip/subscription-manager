@@ -74,14 +74,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self._action_area = self.builder.get_object("RHSMSpokeWindow-action_area1")
         self._register_box = self._registergui.dialog_vbox6
 
-        # FIXME: close_window handling is kind of a mess. Standlone subman gui,
-        # the firstboot screens, and initial-setup need it to do different
-        # things. Potentially a 'Im done with this window now' signal, with
-        # each attaching different handlers.
-        self._registergui.close_window_callback = self._close_window_callback
-
-        self._registergui._error_screen = registergui.CHOOSE_SERVER_PAGE
-
         # we have a ref to _register_box, but need to remove it from
         # the regustergui.window (a GtkDialog), and add it to the main
         # box in the action area of our initial-setup screen.
@@ -91,13 +83,8 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self._register_box.show_all()
         self._registergui.initialize()
 
-    def _close_window_callback(self):
-        self._registergui.goto_error_screen()
-
     def finished(self):
         self._registergui.done()
-        self._registergui.cancel_button.hide()
-        self._registergui.register_button.hide()
         self._done = True
 
     # Update gui widgets to reflect state of self.data
