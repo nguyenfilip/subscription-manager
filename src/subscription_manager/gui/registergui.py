@@ -144,11 +144,12 @@ class RegisterInfo(object):
 
 class RegisterWidget(widgets.SubmanBaseWidget):
     gui_file = "registration"
-    widget_names = ['register_notebook', 'register_details_label', 'register_progressbar', 'progress_label']
+    widget_names = ['register_widget', 'register_notebook', 'register_details_label', 'register_progressbar', 'progress_label']
 
     def __init__(self, backend, facts):
         super(RegisterWidget, self).__init__()
 
+        log.debug("RegisterWidget")
         #widget
         self.backend = backend
         self.identity = require(IDENTITY)
@@ -174,6 +175,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self._current_screen = CHOOSE_SERVER_PAGE
 
+        log.debug("SCEEEEEEEEEEEEEEE")
+        self.info = RegisterInfo()
         # RegisterInfo widget
         # values that will be set by the screens
         self.username = None
@@ -187,10 +190,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         # FIXME: change glade name
         self.details_label = self.register_details_label
+        self.register_widget.show()
 
     def initialize(self):
-
         self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
+        self.register_widget.show_all()
 
     def set_initial_screen(self):
         target = self._get_initial_screen()
@@ -203,7 +207,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         if screen > PROGRESS_PAGE:
             self._current_screen = screen
             if self._screens[screen].needs_gui:
-                self._set_register_label(screen)
+                self._set_register_button_label(screen)
                 self.register_notebook.set_current_page(self._screens[screen].index)
         else:
             self.register_notebook.set_current_page(screen + 1)
@@ -277,7 +281,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # change. And or, use signals
     def _set_register_button_label(self, screen):
         button_label = self._screens[screen].button_label
-        self._register_button_label_callback(button_label)
+        # FIXME
+        #self._register_button_label_callback(button_label)
 
     def _stuff_for_dialog_figure_out_later(self):
         if get_state() == REGISTERING:
@@ -290,7 +295,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                 self.register_dialog.set_title(_("Subscription Attachment"))
             self.progress_label.set_markup(_("<b>Attaching</b>"))
 
-    def _clear_screens(self):
+    def clear_screens(self):
         for screen in self._screens:
             screen.clear()
 
@@ -447,6 +452,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         # Ensure that we start on the first page and that
         # all widgets are cleared.
         self.register_widget.set_initial_screen()
+        self.register_widget.initialize()
 
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
@@ -455,7 +461,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.password = None
 
     def initialize(self):
-        self._set_navigation_sensitive(True)
         self.register_widget.clear_screens()
 
     def show(self):
