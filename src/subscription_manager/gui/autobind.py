@@ -22,6 +22,8 @@ _ = gettext.gettext
 
 log = logging.getLogger('rhsm-app.' + __name__)
 
+import pprint
+
 
 class DryRunResult(object):
     """ Encapsulates a dry-run autobind result from the server. """
@@ -30,6 +32,12 @@ class DryRunResult(object):
         self.json = server_json
         self.sorter = cert_sorter
         self.service_level = service_level
+
+    def __repr__(self):
+        a = "<DryRunResult json=%s\nsorter=%s\nservice_level=%s\n>" % (pprint.pformat(self.json),
+                                                                       self.sorter,
+                                                                       self.service_level)
+        return a
 
     def covers_required_products(self):
         """

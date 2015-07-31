@@ -395,6 +395,121 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self.start_progress_timer()
             next_screen.emit('move-to-screen', PROGRESS_PAGE)
 
+        self.info = RegisterInfo()
+
+        # TODO: move these handlers into their own class
+        self.info.connect("notify::username",
+                          self._on_username_password_change)
+        self.info.connect("notify::password",
+                          self._on_username_password_change)
+        self.info.connect("notify::hostname",
+                          self._on_connection_info_change)
+        self.info.connect("notify::port",
+                          self._on_connection_info_change)
+        self.info.connect("notify::prefix",
+                          self._on_connection_info_change)
+        self.info.connect("notify::activation-keys",
+                          self._on_activation_keys_change)
+
+        # expect this to be driving from the parent dialog
+        self.connect('proceed',
+                     self._on_proceed)
+
+        # FIXME: change glade name
+        self.details_label = self.register_details_label
+
+        # update widgets if the values change
+        self.connect('notify::details-label-txt',
+                     self._on_details_label_txt_change)
+        self.connect('notify::register-state',
+                     self._on_register_state_change)
+
+        # To update the 'next/register' button in the parent dialog based on the new page
+        self.register_notebook.connect('switch-page',
+                                       self._on_switch_page)
+
+        screen_classes = [ChooseServerScreen, ActivationKeyScreen,
+                          CredentialsScreen, OrganizationScreen,
+                          EnvironmentScreen, PerformRegisterScreen,
+                          SelectSLAScreen, ConfirmSubscriptionsScreen,
+                          PerformSubscribeScreen, RefreshSubscriptionsScreen,
+                          InfoScreen, DoneScreen]
+        self._screens = []
+
+        # TODO: current_screen as a gobject property
+        for idx, screen_class in enumerate(screen_classes):
+            screen = screen_class(parent=self)
+
+            # connect handlers to various screen signals. The screens are
+            # Gobjects not gtk widgets, so they can't propagate normally.
+            screen.connect('move-to-screen', self._on_move_to_screen)
+            screen.connect('stay-on-screen', self._on_stay_on_screen)
+            screen.connect('register-error', self._on_screen_register_error)
+            screen.connect('register-finished',
+                           self._on_screen_register_finished)
+            screen.connect('attach-finished',
+                           self._on_screen_attach_finished)
+
+            # add the index of the screen in self._screens to the class itself
+            screen.screens_index = idx
+
+            self._screens.append(screen)
+
+            # Some screens have no gui controls, they just use the
+            # PROGRESS_PAGE, so the indexes to the register_notebook's pages and
+            # to self._screen differ
+            if screen.needs_gui:
+                # screen.index is the screens index in self.register_notebook
+                screen.index = self.register_notebook.append_page(
+                        screen.container, tab_label=None)
+
+        self._current_screen = None
+
+        # Track screens we "show" so we can choose a reasonable error screen
+        self.screen_history = []
+
+        # FIXME: modify property instead
+        self.callbacks = []
+
+        self.register_widget.show()
+
+    def initialize(self):
+        log.debug("RegisterWidget.initialize")
+        self.set_initial_screen()
+        self.clear_screens()
+        self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
+        self.register_widget.show_all()
+
+    def set_initial_screen(self):
+        self._set_screen(self.initial_screen)
+        self._current_screen = self.initial_screen
+        self.screen_history = [self.initial_screen]
+
+    # switch-page should be after the current screen is reset
+    def _on_switch_page(self, notebook, page, page_num):
+        current_screen = self._screens[self._current_screen]
+        # NonGuiScreens have a None button label
+        if current_screen.button_label:
+            self.set_property('register-button-label', current_screen.button_label)
+
+    # HMMM: If the connect/backend/async, and the auth info is composited into
+    #       the same GObject, these could be class closure handlers
+    def _on_username_password_change(self, *args):
+        log.debug("on_username_password_change args=%s", args)
+        self.backend.cp_provider.set_user_pass(self.info.username, self.info.password)
+        self.backend.update()
+
+    def _on_connection_info_change(self, *args):
+        log.debug("on_connection_info_change args=%s", args)
+        self.backend.update()
+
+    def _on_activation_keys_change(self, obj, param):
+        activation_keys = obj.get_property('activation-keys')
+
+        # Unset backend from attempting to use basic auth
+        if activation_keys:
+            self.backend.cp_provider.set_user_pass()
+            self.backend.update()
     def _set_screen(self, screen):
         """Handle both updating self._current_screen, and updating register_notebook."""
         next_notebook_page = screen
@@ -495,6 +610,19 @@ class RegisterDialog(widgets.SubmanBaseWidget):
     gui_file = "register_dialog"
     __gtype_name__ = 'RegisterDialog'
 
+            self.progress_label.set_markup(_("<b>Attaching</b>"))
+
+    def clear_screens(self):
+        for screen in self._screens:
+            screen.clear()
+
+    def _timeout_callback(self):
+        self.register_progressbar.pulse()
+        # return true to keep it pulsing
+        return True
+
+
+class RegisterDialog(widgets.SubmanBaseWidget):
     def __init__(self, backend, facts=None, callbacks=None):
         """
         Callbacks will be executed when registration status changes.
@@ -608,6 +736,51 @@ class AutobindWizardDialog(RegisterDialog):
         super(AutobindWizardDialog, self).show()
         self.register_widget.change_screen(SELECT_SLA_PAGE)
 
+        else:
+            self.handle_register_error(obj, msg)
+        return True
+
+    def handle_register_error(self, obj, msg):
+        self.error_dialog(obj, msg)
+
+        # RegisterWidget.do_register_error() will take care of changing screens
+
+    def handle_register_exception(self, obj, msg, exc_info):
+        message = format_exception(exc_info, msg)
+        self.error_dialog(obj, message)
+
+    def error_dialog(self, obj, msg):
+        show_error_window(msg)
+
+    def _on_register_button_clicked(self, button):
+        self.register_widget.emit('proceed')
+
+    def _on_register_state_change(self, obj, value):
+        state = obj.get_property('register-state')
+        if state == REGISTERING:
+            self.register_dialog.set_title(_("System Registration"))
+        elif state == SUBSCRIBING:
+            self.register_dialog.set_title(_("Subscription Attachment"))
+
+    def _on_register_button_label_change(self, obj, value):
+        register_label = obj.get_property('register-button-label')
+        # FIXME: button_label can be None for NonGuiScreens. Seems like
+        #
+        if register_label:
+            self.register_button.set_label(register_label)
+
+
+class AutobindWizardDialog(RegisterDialog):
+    __gtype_name__ = "AutobindWizard"
+
+    initial_screen = SELECT_SLA_PAGE
+
+    def __init__(self, backend, facts):
+        super(AutobindWizardDialog, self).__init__(backend, facts)
+
+    def show(self):
+        super(AutobindWizardDialog, self).show()
+        self.register_widget.change_screen(SELECT_SLA_PAGE)
 
 # TODO: Screen could be a container widget, that has the rest of the gui as
 #       a child. That way, we could add the Screen class to the

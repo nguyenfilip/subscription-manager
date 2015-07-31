@@ -92,6 +92,9 @@
           <object class="AtkObject" id="register_notebook-atkobject">
             <property name="AtkObject::accessible-name" translatable="yes">register_notebook</property>
           </object>
+          <packing>
+            <property name="tab_fill">False</property>
+          </packing>
         </child>
       </object>
       <packing>
