@@ -191,8 +191,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # FIXME: change glade name
         self.details_label = self.register_details_label
         self.register_widget.show()
+        import pprint
+        pp = pprint.pprint
+        pp(self.gui.builder.get_objects())
+        for i in self.widget_names:
+            pp(getattr(self, i))
 
     def initialize(self):
+        log.debug("RegisterWidget.initialize")
         self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
         self.register_widget.show_all()
 
@@ -428,7 +434,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     """
 
-    widget_names = ['register_dialog',
+    widget_names = ['register_dialog', 'register_dialog_main_vbox',
                     'register_progressbar', 'register_details_label',
                     'cancel_button', 'register_button', 'progress_label',
                     'dialog_vbox6']
@@ -453,6 +459,8 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         # all widgets are cleared.
         self.register_widget.set_initial_screen()
         self.register_widget.initialize()
+        self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
+                                                  True, True, 0)
 
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
@@ -462,12 +470,15 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def initialize(self):
         self.register_widget.clear_screens()
+        log.debug("RegisterScreen.initialize")
+
 
     def show(self):
         # initial-setup module skips this, since it results in a
         # new top level window that isn't reparented to the initial-setup
         # screen.
         self.register_dialog.show()
+        log.debug("RegsiterScreen.show")
 
 <<<<<<< HEAD
     def _set_initial_screen(self):
