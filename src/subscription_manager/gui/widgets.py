@@ -126,15 +126,18 @@ class BuilderFileBasedWidget(FileBasedGui):
 
 
 # FIXME: not actually a widget, just an object that has a widget
-class SubmanBaseWidget(object):
+class SubmanBaseWidget(ga_GObject.GObject):
     widget_names = []
     gui_file = None
 
     def __init__(self):
+        ga_GObject.GObject.__init__(self)
         self.gui = self._gui_factory()
         self.pull_widgets(self.gui, self.widget_names)
         self.log = logging.getLogger('rhsm-app.' + __name__ +
                                      '.' + self.__class__.__name__)
+
+
 
     def _gui_factory(self):
         gui = BuilderFileBasedWidget.from_file(self.gui_file)

@@ -146,6 +146,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     gui_file = "registration"
     widget_names = ['register_widget', 'register_notebook', 'register_details_label', 'register_progressbar', 'progress_label']
 
+    __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
+                                None, (int,)),
+                    'finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                                 None, [])}
+
     def __init__(self, backend, facts):
         super(RegisterWidget, self).__init__()
 
@@ -188,9 +193,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.dry_run_result = None
         self.skip_auto_bind = False
 
+        # FIXME: modify property instead
+        self.callbacks = []
+
         # FIXME: change glade name
         self.details_label = self.register_details_label
         self.register_widget.show()
+
         import pprint
         pp = pprint.pprint
         pp(self.gui.builder.get_objects())
@@ -219,8 +228,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self.register_notebook.set_current_page(screen + 1)
 
     # Go to the next screen/state
-    def proceed(self):
-
+    def do_proceed(self, args):
+        log.debug("registerWidget.proceed")
+        log.debug("do_proceed args=%s", args)
         result = self._screens[self._current_screen].apply()
 
         if result == FINISH:
@@ -234,7 +244,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self._run_pre(result)
         return False
 
-    register = proceed
+    register = do_proceed
 
     # Between the "screens", start off the next screens pre,
     # which may be "async" and happening in a thread.
@@ -260,7 +270,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.emit_consumer_signal()
 
     def pre_done(self, next_screen):
-        self._set_navigation_sensitive(True)
         if next_screen == DONT_CHANGE:
             self._set_screen(self._current_screen)
         else:
@@ -277,8 +286,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         return DONT_CHANGE
 
     def emit_consumer_signal(self):
-        for method in self.callbacks:
-            method()
+        self.emit('finished')
 
     def _set_details_label(self, details):
         self.details_label.set_label("<small>%s</small>" % details)
@@ -286,7 +294,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # RegisterDialog provide a callback to call when the nav button need to
     # change. And or, use signals
     def _set_register_button_label(self, screen):
-        button_label = self._screens[screen].button_label
+        pass
+        #button_label = self._screens[screen].button_label
         # FIXME
         #self._register_button_label_callback(button_label)
 
@@ -451,7 +460,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         callbacks = {"on_register_cancel_button_clicked": self.cancel,
                      "on_register_button_clicked": self._on_register_button_clicked,
                      "hide": self.cancel,
-                     "on_register_dialog_delete_event": self._delete_event}
+                     "on_register_dialog_delete_event": self.cancel}
         self.connect_signals(callbacks)
 
         self.register_widget = RegisterWidget(backend, facts)
@@ -462,6 +471,10 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
                                                   True, True, 0)
 
+        self.register_button.connect('clicked', self._on_register_button_clicked)
+        self.cancel_button.connect('clicked', self.cancel)
+
+        self.register_widget.connect('finished', self.cancel)
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
 
@@ -472,7 +485,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_widget.clear_screens()
         log.debug("RegisterScreen.initialize")
 
-
     def show(self):
         # initial-setup module skips this, since it results in a
         # new top level window that isn't reparented to the initial-setup
@@ -480,98 +492,14 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_dialog.show()
         log.debug("RegsiterScreen.show")
 
-<<<<<<< HEAD
-    def _set_initial_screen(self):
-        target = self._get_initial_screen()
-        self._set_screen(target)
-
-    def _get_initial_screen(self):
-        return CHOOSE_SERVER_PAGE
-
-    # for subman gui, we don't need to switch screens on error
-    # but for firstboot, we will go back to the info screen if
-    # we have it.
-    @property
-    def error_screen(self):
-        return self._error_screen
-
-    def goto_error_screen(self):
-        self._set_navigation_sensitive(True)
-        self._set_screen(self.error_screen)
-
-=======
-    # hate that method, go away
->>>>>>> wip, split RegisterScreen -> RegisterDialog and RegisterWidget
-    # FIXME: This exists because standalone gui needs to update the nav
-    #        buttons in it's own top level window, while firstboot needs to
-    #        update the buttons in the main firstboot window. Firstboot version
-    #        has additional logic for rhel5/rhel6 differences.
-<<<<<<< HEAD
-    # FIXME: just split this into a registerWidget and a registerDialog
-    def _set_navigation_sensitive(self, sensitive):
-        # We could unsens the cancel button here, but since we use it as
-        # a 'do over' button that sends the dialog back to the start, just
-        # leave it enabled, to avoid leaving un unsens after an async error
-        # handler.
-        self.register_button.set_sensitive(sensitive)
-
-    def _set_screen(self, screen):
-        if screen > PROGRESS_PAGE:
-            self._current_screen = screen
-            if self._screens[screen].needs_gui:
-                self._set_register_label(screen)
-                self.register_notebook.set_current_page(self._screens[screen].index)
-        else:
-            self.register_notebook.set_current_page(screen + 1)
-
-        if get_state() == REGISTERING:
-            # aka, if this is firstboot
-            if not isinstance(self.register_dialog, ga_Gtk.VBox):
-                self.register_dialog.set_title(_("System Registration"))
-            self.progress_label.set_markup(_("<b>Registering</b>"))
-        elif get_state() == SUBSCRIBING:
-            if not isinstance(self.register_dialog, ga_Gtk.VBox):
-                self.register_dialog.set_title(_("Subscription Attachment"))
-            self.progress_label.set_markup(_("<b>Attaching</b>"))
-
-    def _set_register_label(self, screen):
-        button_label = self._screens[screen].button_label
-        self.register_button.set_label(button_label)
-=======
-    #def _set_navigation_sensitive(self, sensitive):
-    #    self.cancel_button.set_sensitive(sensitive)
-    #    self.register_button.set_sensitive(sensitive)
->>>>>>> wip, split RegisterScreen -> RegisterDialog and RegisterWidget
-
-    def _delete_event(self, event, data=None):
-        return self.close_window()
-
     def cancel(self, button):
-        self.close_window()
-
-    def _on_register_button_clicked(self, button):
-        self.register_widget.proceed()
-        # self.register_widget.next()
-
-<<<<<<< HEAD
-        if failed:
-            self.goto_error_screen()
-            return
-
-        # FIXME: subman-gui needs this but initial-setup doesnt
-=======
-    def finish_registration(self):
->>>>>>> wip, split RegisterScreen -> RegisterDialog and RegisterWidget
-        self.close_window_callback()
-
-    def close_window(self):
-        if self.close_window_callback:
-            self.close_window_callback()
-
-    def _close_window_callback(self):
-        set_state(REGISTERING)
         self.register_dialog.hide()
         return True
+
+    def _on_register_button_clicked(self, button):
+        log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
+        self.register_widget.emit('proceed', 42)
+        log.debug("post")
 
 
 class AutobindWizard(RegisterDialog):
