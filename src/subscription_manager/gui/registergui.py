@@ -74,6 +74,7 @@ def set_state(new_state):
     global state
     state = new_state
 
+ERROR_SCREEN = -3
 DONT_CHANGE = -2
 PROGRESS_PAGE = -1
 CHOOSE_SERVER_PAGE = 0
@@ -148,10 +149,12 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
                                 None, (int,)),
+                    'error': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, []),
                     'finished': (ga_GObject.SIGNAL_RUN_FIRST,
                                  None, [])}
 
-    def __init__(self, backend, facts):
+    def __init__(self, backend, facts, parent=None):
         super(RegisterWidget, self).__init__()
 
         log.debug("RegisterWidget")
@@ -163,6 +166,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # widget
         self.async = AsyncBackend(self.backend)
 
+        self.parent = parent
+
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
@@ -171,8 +176,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                           PerformSubscribeScreen, RefreshSubscriptionsScreen,
                           InfoScreen, DoneScreen]
         self._screens = []
+
         for screen_class in screen_classes:
-            screen = screen_class(self, self.backend)
+            screen = screen_class(parent=self, backend=self.backend)
             self._screens.append(screen)
             if screen.needs_gui:
                 screen.index = self.register_notebook.append_page(
@@ -219,6 +225,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         return CHOOSE_SERVER_PAGE
 
     def _set_screen(self, screen):
+        log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
         if screen > PROGRESS_PAGE:
             self._current_screen = screen
             if self._screens[screen].needs_gui:
@@ -232,6 +239,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("registerWidget.proceed")
         log.debug("do_proceed args=%s", args)
         result = self._screens[self._current_screen].apply()
+        log.debug("current screen.apply result=%s", result)
 
         if result == FINISH:
             self.finish_registration()
@@ -252,6 +260,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # XXX move this into the button handling somehow?
         if screen == FINISH:
             self.finish_registration()
+            return
+
+        if screen == ERROR_SCREEN:
+            self.goto_error_screen()
             return
 
         self._set_screen(screen)
@@ -277,13 +289,20 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self._run_pre(next_screen)
 
     def done_screen(self):
+        log.debug("done_screen")
         self._set_screen(DONE_PAGE)
 
     # for subman gui, we don't need to switch screens on error
     # but for firstboot, we will go back to the info screen if
     # we have it.
     def error_screen(self):
-        return DONT_CHANGE
+        log.debug("error_screen index=%s screen=%s", self._current_screen,
+                  self._screens[self._current_screen])
+        self._set_screen(self._screens[self._current_screen]._error_screen)
+
+    # Error raised by a notebook page/screen
+    def screen_error(self):
+        self.emit('error')
 
     def emit_consumer_signal(self):
         self.emit('finished')
@@ -463,11 +482,14 @@ class RegisterDialog(widgets.SubmanBaseWidget):
                      "on_register_dialog_delete_event": self.cancel}
         self.connect_signals(callbacks)
 
-        self.register_widget = RegisterWidget(backend, facts)
+        # FIXME: Need better error handling in general, but it's kind of
+        # annoying to have to pass the top level widget all over the place
+        self.register_widget = RegisterWidget(backend, facts, parent=self.register_dialog)
         # Ensure that we start on the first page and that
         # all widgets are cleared.
         self.register_widget.set_initial_screen()
         self.register_widget.initialize()
+
         self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
                                                   True, True, 0)
 
@@ -475,6 +497,8 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.cancel_button.connect('clicked', self.cancel)
 
         self.register_widget.connect('finished', self.cancel)
+        self.register_widget.connect('error', self.on_error)
+
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
 
@@ -495,6 +519,10 @@ class RegisterDialog(widgets.SubmanBaseWidget):
     def cancel(self, button):
         self.register_dialog.hide()
         return True
+
+    def on_error(self, args):
+        log.debug("register_dialog.on_error args=%s", args)
+        self.register_widget.error_screen()
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
@@ -521,6 +549,7 @@ class Screen(widgets.SubmanBaseWidget):
 
     def __init__(self, parent, backend):
         super(Screen, self).__init__()
+        log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
 
         self.pre_message = ""
         self.button_label = _("Register")
@@ -528,6 +557,8 @@ class Screen(widgets.SubmanBaseWidget):
         self.index = -1
         self._parent = parent
         self._backend = backend
+        self._error_screen = self.index
+
 
     def pre(self):
         return False
@@ -542,13 +573,16 @@ class Screen(widgets.SubmanBaseWidget):
         pass
 
 
-class NoGuiScreen(object):
+class NoGuiScreen(ga_GObject.GObject):
 
     def __init__(self, parent, backend):
+        ga_GObject.GObject.__init__(self)
+
         self._parent = parent
         self._backend = backend
         self.button_label = None
         self.needs_gui = False
+        self._error_screen = None
 
     def pre(self):
         return True
@@ -567,17 +601,17 @@ class PerformRegisterScreen(NoGuiScreen):
 
     def __init__(self, parent, backend):
         super(PerformRegisterScreen, self).__init__(parent, backend)
-        self.pre_message = _("Registering your system")
+        self._error_screen = CREDENTIALS_PAGE
 
     def _on_registration_finished_cb(self, new_account, error=None):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR, self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
             return
 
         try:
             managerlib.persist_consumer_cert(new_account)
-            self._parent.backend.cs.force_cert_check()  # Ensure there isn't much wait time
+            self._backend.cs.force_cert_check()  # Ensure there isn't much wait time
 
             if self._parent.activation_keys:
                 self._parent.pre_done(REFRESH_SUBSCRIPTIONS_PAGE)
@@ -587,7 +621,7 @@ class PerformRegisterScreen(NoGuiScreen):
                 self._parent.pre_done(SELECT_SLA_PAGE)
         except Exception, e:
             handle_gui_exception(e, REGISTER_ERROR, self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
@@ -613,11 +647,11 @@ class PerformSubscribeScreen(NoGuiScreen):
         if error is not None:
             handle_gui_exception(error, _("Error subscribing: %s"),
                                  self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
             return
 
         self._parent.pre_done(FINISH)
-        self._parent.backend.cs.force_cert_check()
+        self._backend.cs.force_cert_check()
 
     def pre(self):
         self._parent.async.subscribe(self._parent.identity.uuid,
@@ -767,7 +801,7 @@ class SelectSLAScreen(Screen):
                 log.exception(error)
                 handle_gui_exception(error, _("Error subscribing"),
                                      self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
             return
 
         (current_sla, unentitled_products, sla_data_map) = result
@@ -785,7 +819,7 @@ class SelectSLAScreen(Screen):
                                      "Subscriptions\" tab to manually "
                                      "attach subscriptions.") % current_sla,
                                     self._parent.parent)
-                self._parent.finish_registration(failed=True)
+                self._parent.screen_error()
                 return
 
             self._dry_run_result = sla_data_map.values()[0]
@@ -803,7 +837,7 @@ class SelectSLAScreen(Screen):
                                  "via the \"All Available Subscriptions\" "
                                  "tab or purchase additional subscriptions."),
                                  parent=self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
 
     def pre(self):
         set_state(SUBSCRIBING)
@@ -841,7 +875,7 @@ class EnvironmentScreen(Screen):
         environments = result_tuple
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR, self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
             return
 
         if not environments:
@@ -900,8 +934,8 @@ class OrganizationScreen(Screen):
     def _on_get_owner_list_cb(self, owners, error=None):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR,
-                    self._parent.window)
-            self._parent.finish_registration(failed=True)
+                    self._parent.parent)
+            self._parent.screen_error()
             return
 
         owners = [(owner['key'], owner['displayName']) for owner in owners]
@@ -912,8 +946,8 @@ class OrganizationScreen(Screen):
             handle_gui_exception(None,
                                  _("<b>User %s is not able to register with any orgs.</b>") %
                                    (self._parent.username),
-                    self._parent.parent)
-            self._parent.finish_registration(failed=True)
+                    self._parent.window)
+            self._parent.screen_error()
             return
 
         if len(owners) == 1:
@@ -1107,7 +1141,8 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
         if error is not None:
             handle_gui_exception(error, _("Error subscribing: %s"),
                                  self._parent.parent)
-            self._parent.finish_registration(failed=True)
+            #self._parent.finish_registration(failed=True)
+            self._parent.screen_error()
             return
 
         self._parent.pre_done(FINISH)
