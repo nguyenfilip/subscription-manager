@@ -168,7 +168,6 @@ class MainWindow(widgets.SubmanBaseWidget):
 
         self.product_dir = prod_dir or self.backend.product_dir
         self.entitlement_dir = ent_dir or self.backend.entitlement_dir
-
         self.system_facts_dialog = factsgui.SystemFactsDialog(self.facts)
 
         self.registration_dialog = registergui.RegisterScreen(self.backend, self.facts,
@@ -227,6 +226,7 @@ class MainWindow(widgets.SubmanBaseWidget):
             "on_getting_started_menu_item_activate": self._getting_started_item_clicked,
             "on_online_docs_menu_item_activate": self._online_docs_item_clicked,
             "on_quit_menu_item_activate": ga_Gtk.main_quit,
+            "delete-event": ga_Gtk.main_quit
         })
 
         # TODO: why is this defined in the init scope?
@@ -241,8 +241,6 @@ class MainWindow(widgets.SubmanBaseWidget):
             self.my_subs_tab.update_subscriptions()
             # Update main window
             self.refresh()
-            # Reset repos dialog, see bz 1132919
-            self.repos_dialog = RepositoriesDialog(self.backend, self._get_window())
 
         self.backend.cs.add_callback(on_cert_sorter_cert_change)
 
@@ -360,12 +358,15 @@ class MainWindow(widgets.SubmanBaseWidget):
 
     def _register_item_clicked(self, widget):
         self.log.debug("_register_item_clicked widget=%s", widget)
-        self.registration_dialog.initialize()
-        self.registration_dialog.show()
+        registration_dialog = registergui.RegisterDialog(self.backend, self.facts)
+        registration_dialog.initialize()
+        registration_dialog.show()
 
     def _preferences_item_clicked(self, widget):
         try:
-            self.preferences_dialog.show()
+            preferences_dialog = PreferencesDialog(self.backend,
+                                                    self._get_window())
+            preferences_dialog.show()
         except Exception, e:
             handle_gui_exception(e, _("Error in preferences dialog."
                                       "Please see /var/log/rhsm/rhsm.log for more information."),
@@ -373,7 +374,8 @@ class MainWindow(widgets.SubmanBaseWidget):
 
     def _repos_item_clicked(self, widget):
         try:
-            self.repos_dialog.show()
+            repos_dialog = RepositoriesDialog(self.backend, self._get_window())
+            repos_dialog.show()
         except Exception, e:
             handle_gui_exception(e, _("Error in repos dialog. "
                                       "Please see /var/log/rhsm/rhsm.log for more information."),
@@ -414,16 +416,21 @@ class MainWindow(widgets.SubmanBaseWidget):
         prompt.connect('response', self._on_unregister_prompt_response)
 
     def _proxy_config_item_clicked(self, widget):
-        self.network_config_dialog.set_parent_window(self._get_window())
-        self.network_config_dialog.show()
+        network_config_dialog = networkConfig.NetworkConfigDialog()
+        network_config_dialog.saveButton.connect("clicked", self._config_changed)
+
+        network_config_dialog.set_parent_window(self._get_window())
+        network_config_dialog.show()
 
     def _facts_item_clicked(self, widget):
-        self.system_facts_dialog.set_parent_window(self._get_window())
-        self.system_facts_dialog.show()
+        system_facts_dialog = factsgui.SystemFactsDialog(self.facts)
+        system_facts_dialog.set_parent_window(self._get_window())
+        system_facts_dialog.show()
 
     def _import_cert_item_clicked(self, widget):
-        self.import_sub_dialog.set_parent_window(self._get_window())
-        self.import_sub_dialog.show()
+        import_sub_dialog = ImportSubDialog()
+        import_sub_dialog.set_parent_window(self._get_window())
+        import_sub_dialog.show()
 
     def _update_certificates_button_clicked(self, widget):
         autobind_wizard = registergui.AutobindWizard(self.backend,
@@ -433,8 +440,9 @@ class MainWindow(widgets.SubmanBaseWidget):
         autobind_wizard.show()
 
     def _redeem_item_clicked(self, widget):
-        self.redeem_dialog.set_parent_window(self._get_window())
-        self.redeem_dialog.show()
+        redeem_dialog = redeem.RedeemDialog(self.backend)
+        redeem_dialog.set_parent_window(self._get_window())
+        redeem_dialog.show()
 
     def _getting_started_item_clicked(self, widget):
         try:
