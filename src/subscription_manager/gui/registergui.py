@@ -168,6 +168,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.parent = parent
 
+        self.info = RegisterInfo()
+
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
@@ -186,18 +188,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self._current_screen = CHOOSE_SERVER_PAGE
 
-        log.debug("SCEEEEEEEEEEEEEEE")
-        self.info = RegisterInfo()
-        # RegisterInfo widget
-        # values that will be set by the screens
-        self.username = None
-        self.consumername = None
-        self.activation_keys = None
-        self.owner_key = None
-        self.environment = None
-        self.current_sla = None
-        self.dry_run_result = None
-        self.skip_auto_bind = False
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -206,11 +196,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.details_label = self.register_details_label
         self.register_widget.show()
 
-        import pprint
-        pp = pprint.pprint
-        pp(self.gui.builder.get_objects())
-        for i in self.widget_names:
-            pp(getattr(self, i))
 
     def initialize(self):
         log.debug("RegisterWidget.initialize")
@@ -559,7 +544,6 @@ class Screen(widgets.SubmanBaseWidget):
         self._backend = backend
         self._error_screen = self.index
 
-
     def pre(self):
         return False
 
@@ -611,6 +595,7 @@ class PerformRegisterScreen(NoGuiScreen):
 
         try:
             managerlib.persist_consumer_cert(new_account)
+            # FIXME: property/signal
             self._backend.cs.force_cert_check()  # Ensure there isn't much wait time
 
             if self._parent.activation_keys:
@@ -1040,6 +1025,7 @@ class CredentialsScreen(Screen):
         if not self._validate_account():
             return DONT_CHANGE
 
+        # FIXME: property
         self._backend.cp_provider.set_user_pass(self._username, self._password)
 
         return OWNER_SELECT_PAGE
@@ -1241,6 +1227,8 @@ class ChooseServerScreen(Screen):
 
         log.debug("Writing server data to rhsm.conf")
         CFG.save()
+
+        # FIXME: property
         self._backend.update()
         if self.activation_key_checkbox.get_active():
             return ACTIVATION_KEY_PAGE
