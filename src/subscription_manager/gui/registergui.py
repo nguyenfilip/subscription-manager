@@ -547,7 +547,7 @@ class Screen(widgets.SubmanBaseWidget):
     widget_names = ['container']
     gui_file = None
 
-    def __init__(self, parent, backend):
+    def __init__(self, parent):
         super(Screen, self).__init__()
         log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
 
@@ -557,7 +557,6 @@ class Screen(widgets.SubmanBaseWidget):
         self.index = -1
         self._parent = parent
         self._error_screen = self.index
-        self._backend = backend
 
     def pre(self):
         return False
@@ -603,8 +602,8 @@ class NoGuiScreen(ga_GObject.GObject):
 
 class PerformRegisterScreen(NoGuiScreen):
 
-    def __init__(self, parent, backend):
-        super(PerformRegisterScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(PerformRegisterScreen, self).__init__(parent)
         self._error_screen = CREDENTIALS_PAGE
 
     def _on_registration_finished_cb(self, new_account, error=None):
@@ -677,10 +676,9 @@ class ConfirmSubscriptionsScreen(Screen):
 
     gui_file = "confirmsubs"
 
-    def __init__(self, parent, backend):
+    def __init__(self, parent):
 
-        super(ConfirmSubscriptionsScreen, self).__init__(parent,
-                                                         backend)
+        super(ConfirmSubscriptionsScreen, self).__init__(parent)
         self.button_label = _("Attach")
 
         self.store = ga_Gtk.ListStore(str, bool, str)
@@ -736,8 +734,8 @@ class SelectSLAScreen(Screen):
                                           'owner_treeview']
     gui_file = "selectsla"
 
-    def __init__(self, parent, backend):
-        super(SelectSLAScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(SelectSLAScreen, self).__init__(parent)
 
         self.pre_message = _("Finding suitable service levels")
         self.button_label = _("Next")
@@ -869,8 +867,8 @@ class EnvironmentScreen(Screen):
     widget_names = Screen.widget_names + ['environment_treeview']
     gui_file = "environment"
 
-    def __init__(self, parent, backend):
-        super(EnvironmentScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(EnvironmentScreen, self).__init__(parent)
 
         self.pre_message = _("Fetching list of possible environments")
         renderer = ga_Gtk.CellRendererText()
@@ -926,8 +924,8 @@ class OrganizationScreen(Screen):
     widget_names = Screen.widget_names + ['owner_treeview']
     gui_file = "organization"
 
-    def __init__(self, parent, backend):
-        super(OrganizationScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(OrganizationScreen, self).__init__(parent)
 
         self.pre_message = _("Fetching list of possible organizations")
 
@@ -996,8 +994,8 @@ class CredentialsScreen(Screen):
 
     gui_file = "credentials"
 
-    def __init__(self, parent, backend):
-        super(CredentialsScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(CredentialsScreen, self).__init__(parent)
 
         self._initialize_consumer_name()
 
@@ -1075,8 +1073,8 @@ class ActivationKeyScreen(Screen):
         ]
     gui_file = "activation_key"
 
-    def __init__(self, parent, backend):
-        super(ActivationKeyScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(ActivationKeyScreen, self).__init__(parent)
         self._initialize_consumer_name()
 
     def _initialize_consumer_name(self):
@@ -1141,8 +1139,8 @@ class ActivationKeyScreen(Screen):
 
 class RefreshSubscriptionsScreen(NoGuiScreen):
 
-    def __init__(self, parent, backend):
-        super(RefreshSubscriptionsScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(RefreshSubscriptionsScreen, self).__init__(parent)
         self.pre_message = _("Attaching subscriptions")
 
     def _on_refresh_cb(self, error=None):
@@ -1166,9 +1164,9 @@ class ChooseServerScreen(Screen):
                                           'activation_key_checkbox']
     gui_file = "choose_server"
 
-    def __init__(self, parent, backend):
+    def __init__(self, parent):
 
-        super(ChooseServerScreen, self).__init__(parent, backend)
+        super(ChooseServerScreen, self).__init__(parent)
 
         self.button_label = _("Next")
 
@@ -1516,8 +1514,8 @@ class AsyncBackend(object):
 class DoneScreen(Screen):
     gui_file = "done_box"
 
-    def __init__(self, parent, backend):
-        super(DoneScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(DoneScreen, self).__init__(parent)
         self.pre_message = "We are done."
 
 
@@ -1536,8 +1534,8 @@ class InfoScreen(Screen):
         ]
     gui_file = "registration_info"
 
-    def __init__(self, parent, backend):
-        super(InfoScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(InfoScreen, self).__init__(parent)
         self.button_label = _("Next")
         callbacks = {
                 "on_why_register_button_clicked":
