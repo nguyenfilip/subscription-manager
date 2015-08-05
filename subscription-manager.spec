@@ -196,7 +196,6 @@ Summary: Firstboot screens for subscription manager
 Group: System Environment/Base
 Requires: %{name}-gui = %{version}-%{release}
 Requires: rhn-setup-gnome
-%endif
 
 # Fedora can figure this out automatically, but RHEL cannot:
 Requires: librsvg2
