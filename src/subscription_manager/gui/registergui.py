@@ -139,6 +139,9 @@ class RegisterInfo(ga_GObject.GObject):
 
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
+    hostname = ga_GObject.property(type=str, default='')
+    port = ga_GObject.property(type=str, default='')
+    prefix = ga_GObject.property(type=str, default='')
 
     @property
     def identity(self):
@@ -173,8 +176,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.info = RegisterInfo()
 
-        self.info.connect("notify::username", self._on_username_change)
-        self.info.connect("notify::password", self._on_password_change)
+        self.info.connect("notify::username", self._on_username_password_change)
+        self.info.connect("notify::password", self._on_username_password_change)
+        self.info.connect("notify::hostname", self._on_connection_info_change)
+        self.info.connect("notify::port", self._on_connection_info_change)
+        self.info.connect("notify::prefix", self._on_connection_info_change)
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
@@ -185,7 +191,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self._screens = []
 
         for screen_class in screen_classes:
-            screen = screen_class(parent=self, backend=self.backend)
+            screen = screen_class(parent=self)
             self._screens.append(screen)
             if screen.needs_gui:
                 screen.index = self.register_notebook.append_page(
@@ -221,8 +227,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _get_initial_screen(self):
         return CHOOSE_SERVER_PAGE
 
-    def _on_username_password_change(self):
+    def _on_username_password_change(self, *args):
+        log.debug("on_username_password_change args=%s", args)
         self.backend.cp_provider.set_user_pass(self.info.username, self.info.password)
+        self.backend.update()
+
+    def _on_connection_info_change(self, *args):
+        log.debug("on_connection_info_change args=%s", args)
+        self.backend.update()
 
     def _set_screen(self, screen):
         log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
@@ -578,14 +590,14 @@ class NoGuiScreen(ga_GObject.GObject):
                     'certs-updated': (ga_GObject.SIGNAL_RUN_FIRST,
                                       None, [])}
 
-    def __init__(self, parent, backend):
+    def __init__(self, parent):
         ga_GObject.GObject.__init__(self)
 
         self._parent = parent
         self.button_label = None
         self.needs_gui = False
         self._error_screen = None
-        self._backend = backend
+        self.pre_message = "Default Pre Message"
 
     def pre(self):
         return True
@@ -940,7 +952,8 @@ class OrganizationScreen(Screen):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR,
                     self._parent.parent)
-            self._parent.screen_error()
+            self._parent.pre_done(CREDENTIALS_PAGE)
+            #self._parent.screen_error()
             return
 
         owners = [(owner['key'], owner['displayName']) for owner in owners]
@@ -952,8 +965,9 @@ class OrganizationScreen(Screen):
                                  _("<b>User %s is not able to register with any orgs.</b>") %
                                    (self._parent.username),
                     self._parent.window)
-            self._parent.screen_error()
-            return
+            self._parent.pre_done(CREDENTIALS_PAGE)
+#            self._parent.screen_error()
+#            return
 
         if len(owners) == 1:
             self._owner_key = owners[0][0]
@@ -968,6 +982,7 @@ class OrganizationScreen(Screen):
         return True
 
     def apply(self):
+        # check for selection exists
         model, tree_iter = self.owner_treeview.get_selection().get_selected()
         self._owner_key = model.get_value(tree_iter, 0)
         return ENVIRONMENT_SELECT_PAGE
@@ -1045,8 +1060,8 @@ class CredentialsScreen(Screen):
         if not self._validate_account():
             return DONT_CHANGE
 
-        self.info.username = self._username
-        self.info.password = self._password
+        self._parent.info.username = self._username
+        self._parent.info.password = self._password
 
         return OWNER_SELECT_PAGE
 
@@ -1248,8 +1263,10 @@ class ChooseServerScreen(Screen):
         log.debug("Writing server data to rhsm.conf")
         CFG.save()
 
-        # FIXME: property
-        self._backend.update()
+        self._parent.info.hostname = hostname
+        self._parent.info.port = port
+        self._parent.info.prefix = prefix
+
         if self.activation_key_checkbox.get_active():
             return ACTIVATION_KEY_PAGE
         else:
