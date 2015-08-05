@@ -127,8 +127,8 @@ class RegistrationBox(widgets.SubmanBaseWidget):
     gui_file = "registration_box"
 
 
-class RegisterInfo(object):
-    username = None
+class RegisterInfo(ga_GObject.GObject):
+    #username = None
     consumername = None
     activation_keys = None
     owner_key = None
@@ -136,6 +136,9 @@ class RegisterInfo(object):
     current_sla = None
     dry_run_result = None
     skip_auto_bind = False
+
+    username = ga_GObject.property(type=str, default='')
+    password = ga_GObject.property(type=str, default='')
 
     @property
     def identity(self):
@@ -170,6 +173,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.info = RegisterInfo()
 
+        self.info.connect("notify::username", self._on_username_change)
+        self.info.connect("notify::password", self._on_password_change)
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
@@ -188,6 +193,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self._current_screen = CHOOSE_SERVER_PAGE
 
+        self.username = None
+        self.consumername = None
+        self.activation_keys = None
+        self.owner_key = None
+        self.environment = None
+        self.current_sla = None
+        self.dry_run_result = None
+        self.skip_auto_bind = False
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -195,7 +208,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # FIXME: change glade name
         self.details_label = self.register_details_label
         self.register_widget.show()
-
 
     def initialize(self):
         log.debug("RegisterWidget.initialize")
@@ -208,6 +220,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def _get_initial_screen(self):
         return CHOOSE_SERVER_PAGE
+
+    def _on_username_password_change(self):
+        self.backend.cp_provider.set_user_pass(self.info.username, self.info.password)
 
     def _set_screen(self, screen):
         log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
@@ -541,8 +556,8 @@ class Screen(widgets.SubmanBaseWidget):
         self.needs_gui = True
         self.index = -1
         self._parent = parent
-        self._backend = backend
         self._error_screen = self.index
+        self._backend = backend
 
     def pre(self):
         return False
@@ -559,14 +574,19 @@ class Screen(widgets.SubmanBaseWidget):
 
 class NoGuiScreen(ga_GObject.GObject):
 
+    __gsignals__ = {'identity-updated': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, []),
+                    'certs-updated': (ga_GObject.SIGNAL_RUN_FIRST,
+                                      None, [])}
+
     def __init__(self, parent, backend):
         ga_GObject.GObject.__init__(self)
 
         self._parent = parent
-        self._backend = backend
         self.button_label = None
         self.needs_gui = False
         self._error_screen = None
+        self._backend = backend
 
     def pre(self):
         return True
@@ -596,7 +616,8 @@ class PerformRegisterScreen(NoGuiScreen):
         try:
             managerlib.persist_consumer_cert(new_account)
             # FIXME: property/signal
-            self._backend.cs.force_cert_check()  # Ensure there isn't much wait time
+            #self._backend.cs.force_cert_check()  # Ensure there isn't much wait time
+            self.emit('identity-updated')
 
             if self._parent.activation_keys:
                 self._parent.pre_done(REFRESH_SUBSCRIPTIONS_PAGE)
@@ -624,8 +645,8 @@ class PerformRegisterScreen(NoGuiScreen):
 
 class PerformSubscribeScreen(NoGuiScreen):
 
-    def __init__(self, parent, backend):
-        super(PerformSubscribeScreen, self).__init__(parent, backend)
+    def __init__(self, parent):
+        super(PerformSubscribeScreen, self).__init__(parent)
         self.pre_message = _("Attaching subscriptions")
 
     def _on_subscribing_finished_cb(self, unused, error=None):
@@ -636,7 +657,8 @@ class PerformSubscribeScreen(NoGuiScreen):
             return
 
         self._parent.pre_done(FINISH)
-        self._backend.cs.force_cert_check()
+
+        self.emit('certs-updated')
 
     def pre(self):
         self._parent.async.subscribe(self._parent.identity.uuid,
@@ -1025,8 +1047,8 @@ class CredentialsScreen(Screen):
         if not self._validate_account():
             return DONT_CHANGE
 
-        # FIXME: property
-        self._backend.cp_provider.set_user_pass(self._username, self._password)
+        self.info.username = self._username
+        self.info.password = self._password
 
         return OWNER_SELECT_PAGE
 
