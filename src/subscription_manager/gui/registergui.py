@@ -155,8 +155,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
                                 None, (int,)),
-                    'error': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
                               None, []),
+                    'register-failure': (ga_GObject.SIGNAL_RUN_FIRST,
+                               None, []),
+                    'attach-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, []),
+                    'attach-failure': (ga_GObject.SIGNAL_RUN_FIRST,
+                               None, []),
                     'finished': (ga_GObject.SIGNAL_RUN_FIRST,
                                  None, [])}
 
@@ -181,6 +187,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.info.connect("notify::hostname", self._on_connection_info_change)
         self.info.connect("notify::port", self._on_connection_info_change)
         self.info.connect("notify::prefix", self._on_connection_info_change)
+
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
@@ -318,6 +325,22 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def emit_consumer_signal(self):
         self.emit('finished')
+
+    # when we decide we can not complete registration
+    def register_failure(self):
+        self.emit('register-failure')
+
+    # when we hit a recoverable error during registration
+    def register_error(self):
+        self.emit('register-error')
+
+    # if we registered, but auto attach can not complete
+    def attach_failure(self):
+        self.emit('attach-failure')
+
+    # we've hit a recoverable error during auto-attach
+    def attach_error(self):
+        self.emit('attach-error')
 
     def _set_details_label(self, details):
         self.details_label.set_label("<small>%s</small>" % details)
@@ -509,7 +532,10 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.cancel_button.connect('clicked', self.cancel)
 
         self.register_widget.connect('finished', self.cancel)
-        self.register_widget.connect('error', self.on_error)
+        self.register_widget.connect('register-error', self.on_register_error)
+        self.register_widget.connect('register-failure', self.on_register_failure)
+        self.register_widget.connect('attach-error', self.on_attach_error)
+        self.register_widget.connect('attach-failure', self.on_attach_failure)
 
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
@@ -532,8 +558,12 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_dialog.hide()
         return True
 
-    def on_error(self, args):
-        log.debug("register_dialog.on_error args=%s", args)
+    def on_register_error(self, args):
+        log.debug("register_dialog.on_register_error args=%s", args)
+        self.register_widget.error_screen()
+
+    def on_register_failure(self, args):
+        log.debug("register_dialog.on_register_failure args=%s", args)
         self.register_widget.error_screen()
 
     def _on_register_button_clicked(self, button):
@@ -549,7 +579,7 @@ class AutobindWizard(RegisterDialog):
 
     def show(self):
         super(AutobindWizard, self).show()
-        self._run_pre(SELECT_SLA_PAGE)
+        self.register_widget._run_pre(SELECT_SLA_PAGE)
 
     def _get_initial_screen(self):
         return SELECT_SLA_PAGE
@@ -661,6 +691,7 @@ class PerformSubscribeScreen(NoGuiScreen):
         self.pre_message = _("Attaching subscriptions")
 
     def _on_subscribing_finished_cb(self, unused, error=None):
+        log.debug("_on_subscribing_finished_cb error=%s", error)
         if error is not None:
             handle_gui_exception(error, _("Error subscribing: %s"),
                                  self._parent.parent)
@@ -802,6 +833,8 @@ class SelectSLAScreen(Screen):
         # (which is MainWindow) because the parent window is closed
         # by finish_registration() after displaying the dialogs.  See
         # BZ #855762.
+        log.debug("_on_get_service_levels_cb result=%s error=%s",
+                  result, error)
         if error is not None:
             if isinstance(error[1], ServiceLevelNotSupportedException):
                 OkDialog(_("Unable to auto-attach, server does not support service levels."),
