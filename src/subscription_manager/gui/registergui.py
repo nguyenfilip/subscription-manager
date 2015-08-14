@@ -597,7 +597,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def on_register_failure(self, args):
         log.debug("register_dialog.on_register_failure args=%s", args)
-        self.cancel()
+        self.register_dialog.hide()
 
     def on_attach_error(self, args):
         log.debug("register_dialog.on_attach_error args=%s", args)
@@ -606,7 +606,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def on_attach_failure(self, args):
         log.debug("register_dialog.on_attach_failure args=%s", args)
-        self.cancel()
+        self.register_dialog.hide()
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
@@ -694,8 +694,8 @@ class NoGuiScreen(ga_GObject.GObject):
 
 
 class ProgressScreen(NoGuiScreen):
-    def __init__(self, parent):
-        ga_GObject.GObject.__init__(self)
+   # def __init__(self, parent):
+    #    ga_GObject.GObject.__init__(self)
 
     def pre(self):
         pass
@@ -929,7 +929,7 @@ class SelectSLAScreen(Screen):
                                      "Subscriptions\" tab to manually "
                                      "attach subscriptions.") % current_sla,
                                     self._parent.parent)
-                self._parent.attach_error()
+                self._parent.attach_failure()
                 return
 
             self._dry_run_result = sla_data_map.values()[0]
@@ -947,7 +947,7 @@ class SelectSLAScreen(Screen):
                                  "via the \"All Available Subscriptions\" "
                                  "tab or purchase additional subscriptions."),
                                  parent=self._parent.parent)
-            self._parent.attach_error()
+            self._parent.attach_failure()
 
     def pre(self):
         set_state(SUBSCRIBING)
