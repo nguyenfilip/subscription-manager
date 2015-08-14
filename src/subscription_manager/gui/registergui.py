@@ -199,6 +199,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         for screen_class in screen_classes:
             screen = screen_class(parent=self)
+            screen.connect('move-to-screen', self._on_move_to_screen)
             self._screens.append(screen)
             if screen.needs_gui:
                 screen.index = self.register_notebook.append_page(
@@ -243,6 +244,31 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("on_connection_info_change args=%s", args)
         self.backend.update()
 
+    def _on_move_to_screen(self, current_screen, next_screen_id):
+        log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
+                  current_screen, next_screen_id)
+        #if screen == PROGRESS_PAGE:
+        #    log.debug("hmmmmmmmmmmmmmmm............")
+        #else:
+
+        # run pre_done/this screen
+        #   if error, stay
+        # run next screens pre()
+        # if next_screen.pre() is async,
+        #    go progress screen
+        # if screen's progress properties exist/change?
+        #current_screen = self._screens[current_screen_id]
+        next_screen = self._screens[next_screen_id]
+
+        current_screen.post()
+        self._set_screen(next_screen_id)
+        async = next_screen.pre()
+        if async:
+            next_screen.emit('move-to-screen', PROGRESS_PAGE)
+
+        # _set_screen would make the current screen be what was next
+        # if async, emit('move-to-screen', next_screen, progress_screen) ?
+
     def _set_screen(self, screen):
         log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
         if screen > PROGRESS_PAGE:
@@ -253,6 +279,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         else:
             self.register_notebook.set_current_page(screen + 1)
 
+    # FIXME: figure out to determine we are on first screen, then this
+    # could just be 'move-to-screen', next screen
     # Go to the next screen/state
     def do_proceed(self, args):
         log.debug("registerWidget.proceed")
@@ -260,16 +288,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         result = self._screens[self._current_screen].apply()
         log.debug("current screen.apply result=%s", result)
 
-        if result == FINISH:
-            self.finish_registration()
-            return True
-        elif result == DONT_CHANGE:
-            return False
+        #if result == FINISH:
+        #    self.finish_registration()
+        #    return True
+        #elif result == DONT_CHANGE:
+        #    return False
 
-        self._screens[self._current_screen].post()
+        #self._screens[self._current_screen].post()
 
-        self._run_pre(result)
-        return False
+        #self._run_pre(result)
+        #return False
 
     register = do_proceed
 
@@ -314,10 +342,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # for subman gui, we don't need to switch screens on error
     # but for firstboot, we will go back to the info screen if
     # we have it.
-    def error_screen(self):
-        log.debug("error_screen index=%s screen=%s", self._current_screen,
-                  self._screens[self._current_screen])
-        self._set_screen(self._screens[self._current_screen]._error_screen)
+    def register_error_screen(self):
+        log.debug("register_error_screen")
+        self._set_screen(CHOOSE_SERVER_PAGE)
+
+    def attach_error_screen(self):
+        log.debug("attach_error_screen")
+        # FIXME: maybe need a usually skipped "about to attach" screen?
+        self._set_screen(SELECT_SLA_PAGE)
 
     # Error raised by a notebook page/screen
     def screen_error(self):
@@ -560,11 +592,21 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def on_register_error(self, args):
         log.debug("register_dialog.on_register_error args=%s", args)
-        self.register_widget.error_screen()
+        # FIXME: can we just ignore this for sm-gui?
+        self.register_widget.register_error_screen()
 
     def on_register_failure(self, args):
         log.debug("register_dialog.on_register_failure args=%s", args)
-        self.register_widget.error_screen()
+        self.cancel()
+
+    def on_attach_error(self, args):
+        log.debug("register_dialog.on_attach_error args=%s", args)
+        # FIXME: can we just ignore this for sm-gui?
+        self.register_widget.attach_error_screen()
+
+    def on_attach_failure(self, args):
+        log.debug("register_dialog.on_attach_failure args=%s", args)
+        self.cancel()
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
@@ -589,6 +631,10 @@ class Screen(widgets.SubmanBaseWidget):
     widget_names = ['container']
     gui_file = None
 
+    # TODO: replace page int with class enum
+    __gsignals__ = {'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                                     None, (int,))}
+
     def __init__(self, parent):
         super(Screen, self).__init__()
         log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
@@ -599,6 +645,9 @@ class Screen(widgets.SubmanBaseWidget):
         self.index = -1
         self._parent = parent
         self._error_screen = self.index
+
+    def stay(self):
+        self.emit('move-to-screen', DONT_CHANGE)
 
     def pre(self):
         return False
@@ -616,7 +665,9 @@ class Screen(widgets.SubmanBaseWidget):
 class NoGuiScreen(ga_GObject.GObject):
 
     __gsignals__ = {'identity-updated': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, []),
+                                         None, []),
+                    'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                                       None, (int,)),
                     'certs-updated': (ga_GObject.SIGNAL_RUN_FIRST,
                                       None, [])}
 
@@ -633,13 +684,22 @@ class NoGuiScreen(ga_GObject.GObject):
         return True
 
     def apply(self):
-        return 1
+        self.emit('move-to-screen', 1)
 
     def post(self):
         pass
 
     def clear(self):
         pass
+
+
+class ProgressScreen(NoGuiScreen):
+    def __init__(self, parent):
+        ga_GObject.GObject.__init__(self)
+
+    def pre(self):
+        pass
+        # set progress label  from props?
 
 
 class PerformRegisterScreen(NoGuiScreen):
@@ -651,7 +711,7 @@ class PerformRegisterScreen(NoGuiScreen):
     def _on_registration_finished_cb(self, new_account, error=None):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR, self._parent.parent)
-            self._parent.screen_error()
+            self._parent.register_error()
             return
 
         try:
@@ -668,7 +728,7 @@ class PerformRegisterScreen(NoGuiScreen):
                 self._parent.pre_done(SELECT_SLA_PAGE)
         except Exception, e:
             handle_gui_exception(e, REGISTER_ERROR, self._parent.parent)
-            self._parent.screen_error()
+            self._parent.register_error()
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
@@ -695,7 +755,7 @@ class PerformSubscribeScreen(NoGuiScreen):
         if error is not None:
             handle_gui_exception(error, _("Error subscribing: %s"),
                                  self._parent.parent)
-            self._parent.screen_error()
+            self._parent.attach_error()
             return
 
         self._parent.pre_done(FINISH)
@@ -746,7 +806,7 @@ class ConfirmSubscriptionsScreen(Screen):
         return column
 
     def apply(self):
-        return PERFORM_SUBSCRIBE_PAGE
+        self.emit('move-to-screen', PERFORM_SUBSCRIBE_PAGE)
 
     def set_model(self):
         self._dry_run_result = self._parent.dry_run_result
@@ -804,7 +864,7 @@ class SelectSLAScreen(Screen):
         group.set_active(True)
 
     def apply(self):
-        return CONFIRM_SUBS_PAGE
+        self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
 
     def post(self):
         self._parent.dry_run_result = self._dry_run_result
@@ -851,7 +911,7 @@ class SelectSLAScreen(Screen):
                 log.exception(error)
                 handle_gui_exception(error, _("Error subscribing"),
                                      self._parent.parent)
-            self._parent.screen_error()
+            self._parent.attach_error()
             return
 
         (current_sla, unentitled_products, sla_data_map) = result
@@ -869,7 +929,7 @@ class SelectSLAScreen(Screen):
                                      "Subscriptions\" tab to manually "
                                      "attach subscriptions.") % current_sla,
                                     self._parent.parent)
-                self._parent.screen_error()
+                self._parent.attach_error()
                 return
 
             self._dry_run_result = sla_data_map.values()[0]
@@ -887,7 +947,7 @@ class SelectSLAScreen(Screen):
                                  "via the \"All Available Subscriptions\" "
                                  "tab or purchase additional subscriptions."),
                                  parent=self._parent.parent)
-            self._parent.screen_error()
+            self._parent.attach_error()
 
     def pre(self):
         set_state(SUBSCRIBING)
@@ -925,7 +985,7 @@ class EnvironmentScreen(Screen):
         environments = result_tuple
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR, self._parent.parent)
-            self._parent.screen_error()
+            self._parent.register_error()
             return
 
         if not environments:
@@ -949,7 +1009,7 @@ class EnvironmentScreen(Screen):
     def apply(self):
         model, tree_iter = self.environment_treeview.get_selection().get_selected()
         self._environment = model.get_value(tree_iter, 0)
-        return PERFORM_REGISTER_PAGE
+        self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def post(self):
         self._parent.environment = self._environment
@@ -985,8 +1045,7 @@ class OrganizationScreen(Screen):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR,
                     self._parent.parent)
-            self._parent.pre_done(CREDENTIALS_PAGE)
-            #self._parent.screen_error()
+            self._parent.register_error()
             return
 
         owners = [(owner['key'], owner['displayName']) for owner in owners]
@@ -998,9 +1057,8 @@ class OrganizationScreen(Screen):
                                  _("<b>User %s is not able to register with any orgs.</b>") %
                                    (self._parent.username),
                     self._parent.window)
-            self._parent.pre_done(CREDENTIALS_PAGE)
-#            self._parent.screen_error()
-#            return
+            self._parent.register_error()
+            return
 
         if len(owners) == 1:
             self._owner_key = owners[0][0]
@@ -1018,7 +1076,7 @@ class OrganizationScreen(Screen):
         # check for selection exists
         model, tree_iter = self.owner_treeview.get_selection().get_selected()
         self._owner_key = model.get_value(tree_iter, 0)
-        return ENVIRONMENT_SELECT_PAGE
+        self.emit('move-to-screen', ENVIRONMENT_SELECT_PAGE)
 
     def post(self):
         self._parent.owner_key = self._owner_key
@@ -1088,15 +1146,17 @@ class CredentialsScreen(Screen):
         self._skip_auto_bind = self.skip_auto_bind.get_active()
 
         if not self._validate_consumername(self._consumername):
-            return DONT_CHANGE
+            self.emit('move-to-screen', DONT_CHANGE)
+            return
 
         if not self._validate_account():
-            return DONT_CHANGE
+            self.emit('move-to-screen', DONT_CHANGE)
+            return
 
         self._parent.info.username = self._username
         self._parent.info.password = self._password
 
-        return OWNER_SELECT_PAGE
+        self.emit('move-to-screen', OWNER_SELECT_PAGE)
 
     def post(self):
         self._parent.username = self._username
@@ -1136,15 +1196,18 @@ class ActivationKeyScreen(Screen):
         self._consumername = self.consumer_entry.get_text().strip()
 
         if not self._validate_owner_key(self._owner_key):
-            return DONT_CHANGE
+            self.emit('move-to-screen', DONT_CHANGE)
+            return
 
         if not self._validate_activation_keys(self._activation_keys):
-            return DONT_CHANGE
+            self.emit('move-to-screen', DONT_CHANGE)
+            return
 
         if not self._validate_consumername(self._consumername):
-            return DONT_CHANGE
+            self.emit('move-to-screen', DONT_CHANGE)
+            return
 
-        return PERFORM_REGISTER_PAGE
+        self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def _split_activation_keys(self, entry):
         keys = re.split(',\s*|\s+', entry)
@@ -1195,8 +1258,7 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
         if error is not None:
             handle_gui_exception(error, _("Error subscribing: %s"),
                                  self._parent.parent)
-            #self._parent.finish_registration(failed=True)
-            self._parent.screen_error()
+            self._parent.register_error()
             return
 
         self._parent.pre_done(FINISH)
@@ -1282,16 +1344,19 @@ class ChooseServerScreen(Screen):
                     show_error_window(_("Unable to reach the server at %s:%s%s") %
                                       (hostname, port, prefix),
                                       self._parent.window)
-                    return self._parent.error_screen
+                    self.emit('register-error')
+                    return
             except MissingCaCertException:
                 show_error_window(_("CA certificate for subscription service has not been installed."),
                                   self._parent.window)
-                return self._parent.error_screen
+                self.emit('register-error')
+                return
 
         except ServerUrlParseError:
             show_error_window(_("Please provide a hostname with optional port and/or prefix: hostname[:port][/prefix]"),
                               self._parent.window)
-            return self._parent.error_screen
+            self.emit('register-error')
+            return
 
         log.debug("Writing server data to rhsm.conf")
         CFG.save()
@@ -1301,9 +1366,9 @@ class ChooseServerScreen(Screen):
         self._parent.info.prefix = prefix
 
         if self.activation_key_checkbox.get_active():
-            return ACTIVATION_KEY_PAGE
+            self.emit('move-to-screen', ACTIVATION_KEY_PAGE)
         else:
-            return CREDENTIALS_PAGE
+            self.emit('move-to-screen', CREDENTIALS_PAGE)
 
     def clear(self):
         # Load the current server values from rhsm.conf:
