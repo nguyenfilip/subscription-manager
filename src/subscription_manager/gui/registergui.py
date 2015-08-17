@@ -318,22 +318,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     register = do_proceed
 
-    # Between the "screens", start off the next screens pre,
-    # which may be "async" and happening in a thread.
-    def _run_pre(self, screen):
-        log.debug("REMOVE ME PLEASE _run_pre screen=%s XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-                  screen)
-
-        self._set_screen(screen)
-        async = self._screens[self._current_screen].pre()
-        if async:
-            # do we have to do this?
-            #self._set_navigation_sensitive(False)
-
-            self._set_screen(PROGRESS_PAGE)
-            # self._set_details_label(
-            #        self._screens[self._current_screen].pre_message)
-
     def finish_registration(self):
         ga_GObject.source_remove(self.timer)
 
