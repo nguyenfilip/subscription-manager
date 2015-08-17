@@ -270,7 +270,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.backend.update()
 
     def _on_stay_on_screen(self, current_screen):
-        log.debug("_on_stay_on_screen current_screen=%s", current_screen)
         self._set_screen(self._current_screen)
 
     # TODO: replace most of the gui flow logic in the Screen subclasses with
@@ -308,10 +307,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             # FIXME: If we just add ProgressPage in the screen order, we
             # shouldn't need this bookeeping
             if self._screens[screen].needs_gui:
-                # FIXME: replace with a handler when we change notebook pages...
                 self.register_notebook.set_current_page(self._screens[screen].index)
         else:
-            # 'next-page' property and move there on change?
             self.register_notebook.set_current_page(screen + 1)
 
     # FIXME: figure out to determine we are on first screen, then this
@@ -327,10 +324,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         ga_GObject.source_remove(self.timer)
 
         self.register_finished()
-
-    def done_screen(self):
-        log.debug("done_screen")
-        self._set_screen(DONE_PAGE)
 
     # for subman gui, we don't need to switch screens on error
     # but for firstboot, we will go back to the info screen if
