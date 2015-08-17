@@ -130,7 +130,6 @@ class RegistrationBox(widgets.SubmanBaseWidget):
 class RegisterInfo(ga_GObject.GObject):
     #username = None
     activation_keys = None
-    owner_key = None
     current_sla = None
     dry_run_result = None
 
@@ -142,6 +141,7 @@ class RegisterInfo(ga_GObject.GObject):
     environment = ga_GObject.property(type=str, default='')
     skip_auto_bind = ga_GObject.property(type=bool, default=False)
     consumername = ga_GObject.property(type=str, default='')
+    owner_key = ga_GObject.property(type=str, default='')
 
     @property
     def identity(self):
@@ -226,7 +226,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self._current_screen = CHOOSE_SERVER_PAGE
 
         self.activation_keys = None
-        self.owner_key = None
         self.environment = None
         self.current_sla = None
         self.dry_run_result = None
@@ -613,11 +612,12 @@ class PerformRegisterScreen(NoGuiScreen):
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
-                 (self._parent.owner_key, self._parent.environment))
+                 (self._parent.info.get_property('owner-key'),
+                  self._parent.environment))
 
         self._parent.async.register_consumer(self._parent.info.get_property('consumername'),
                                              self._parent.facts,
-                                             self._parent.owner_key,
+                                             self._parent.info.get_property('owner-key'),
                                              self._parent.environment,
                                              self._parent.activation_keys,
                                              self._on_registration_finished_cb)
@@ -900,7 +900,7 @@ class EnvironmentScreen(Screen):
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
-        self._parent.async.get_environment_list(self._parent.owner_key,
+        self._parent.async.get_environment_list(self._parent.info.get_property('owner-key'),
                                                 self._on_get_environment_list_cb)
         return True
 
@@ -944,8 +944,6 @@ class OrganizationScreen(Screen):
         self.owner_treeview.set_property("headers-visible", False)
         self.owner_treeview.append_column(column)
 
-        self._owner_key = None
-
     def _on_get_owner_list_cb(self, owners, error=None):
         if error is not None:
             handle_gui_exception(error, REGISTER_ERROR,
@@ -966,7 +964,8 @@ class OrganizationScreen(Screen):
             return
 
         if len(owners) == 1:
-            self._owner_key = owners[0][0]
+            owner_key = owners[0][0]
+            self._parent.info.set_property('owner-key', owner_key)
             # only one org, use it and skip the org selection screen
             self.emit('move-to-screen', ENVIRONMENT_SELECT_PAGE)
         else:
@@ -982,11 +981,9 @@ class OrganizationScreen(Screen):
     def apply(self):
         # check for selection exists
         model, tree_iter = self.owner_treeview.get_selection().get_selected()
-        self._owner_key = model.get_value(tree_iter, 0)
+        owner_key = model.get_value(tree_iter, 0)
+        self._parent.info.set_property('owner-key', owner_key)
         self.emit('move-to-screen', ENVIRONMENT_SELECT_PAGE)
-
-    def post(self):
-        self._parent.owner_key = self._owner_key
 
     def set_model(self, owners):
         owner_model = ga_Gtk.ListStore(str, str)
@@ -1098,10 +1095,10 @@ class ActivationKeyScreen(Screen):
     def apply(self):
         self._activation_keys = self._split_activation_keys(
             self.activation_key_entry.get_text().strip())
-        self._owner_key = self.organization_entry.get_text().strip()
-        self._consumername = self.consumer_entry.get_text().strip()
+        owner_key = self.organization_entry.get_text().strip()
+        consumername = self.consumer_entry.get_text().strip()
 
-        if not self._validate_owner_key(self._owner_key):
+        if not self._validate_owner_key(owner_key):
             #self.emit('move-to-screen', DONT_CHANGE)
             self.stay()
             return
@@ -1116,6 +1113,8 @@ class ActivationKeyScreen(Screen):
             self.stay()
             return
 
+        self._parent.info.set_property('consumername', consumername)
+        self._parent.info.set_property('owner-key', owner_key)
         self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def _split_activation_keys(self, entry):
@@ -1150,11 +1149,11 @@ class ActivationKeyScreen(Screen):
 
     def post(self):
         self._parent.activation_keys = self._activation_keys
-        self._parent.owner_key = self._owner_key
-        self._parent.consumername = self._consumername
         # Environments aren't used with activation keys so clear any
         # cached value.
         self._parent.environment = None
+
+        # FIXME: this should be driver off of user/pass notify
         self._backend.cp_provider.set_user_pass()
 
 
