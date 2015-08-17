@@ -360,6 +360,7 @@ class MainWindow(widgets.SubmanBaseWidget):
 
     def _register_item_clicked(self, widget):
         self.log.debug("_register_item_clicked widget=%s", widget)
+        self.log.debug("self.registration_dialog=%s", self.registration_dialog)
         self.registration_dialog.initialize()
         self.registration_dialog.show()
 

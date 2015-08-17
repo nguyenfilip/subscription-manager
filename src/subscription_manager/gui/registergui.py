@@ -219,6 +219,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                 screen.index = self.register_notebook.append_page(
                         screen.container, tab_label=None)
 
+        # TODO: current_screen as property?
         self._current_screen = CHOOSE_SERVER_PAGE
 
         self.username = None
@@ -237,6 +238,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def initialize(self):
         log.debug("RegisterWidget.initialize")
+        self.set_initial_screen()
+        self.clear_screens()
         self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
         self.register_widget.show_all()
 
@@ -262,39 +265,46 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self._set_screen(self._current_screen)
         #current_screen.post()
 
+    # TODO: replace most of the gui flow logic in the Screen subclasses with
+    #       some state machine that drives them, possibly driving via signals
+    #       indicating each state
+
     def _on_move_to_screen(self, current_screen, next_screen_id):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
                   current_screen, next_screen_id)
-        #if screen == PROGRESS_PAGE:
-        #    log.debug("hmmmmmmmmmmmmmmm............")
-        #else:
-
-        # run pre_done/this screen
-        #   if error, stay
+        # run current_screen post()
+        # point to next_screen
         # run next screens pre()
         # if next_screen.pre() is async,
         #    go progress screen
-        # if screen's progress properties exist/change?
-        #current_screen = self._screens[current_screen_id]
-        next_screen = self._screens[next_screen_id]
 
+        # FIXME: I think we can ditch post()
+        # Split into handling current screen post (the 'out') and
+        # the next screens pre() (the 'in')
         current_screen.post()
+
+        self.change_screen(next_screen_id)
+
+    def change_screen(self, next_screen_id):
+        next_screen = self._screens[next_screen_id]
         self._set_screen(next_screen_id)
+
         async = next_screen.pre()
         if async:
             next_screen.emit('move-to-screen', PROGRESS_PAGE)
-
-        # _set_screen would make the current screen be what was next
-        # if async, emit('move-to-screen', next_screen, progress_screen) ?
 
     def _set_screen(self, screen):
         log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
         if screen > PROGRESS_PAGE:
             self._current_screen = screen
+            # FIXME: If we just add ProgressPage in the screen order, we
+            # shouldn't need this bookeeping
             if self._screens[screen].needs_gui:
+                # FIXME: replace with a handler when we change notebook pages...
                 self._set_register_button_label(screen)
                 self.register_notebook.set_current_page(self._screens[screen].index)
         else:
+            # 'next-page' property and move there on change?
             self.register_notebook.set_current_page(screen + 1)
 
     # FIXME: figure out to determine we are on first screen, then this
@@ -306,17 +316,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         result = self._screens[self._current_screen].apply()
         log.debug("current screen.apply result=%s", result)
 
-        #if result == FINISH:
-        #    self.finish_registration()
-        #    return True
-        #elif result == DONT_CHANGE:
-        #    return False
-
-        #self._screens[self._current_screen].post()
-
-        #self._run_pre(result)
-        #return False
-
     register = do_proceed
 
     # Between the "screens", start off the next screens pre,
@@ -324,14 +323,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _run_pre(self, screen):
         log.debug("REMOVE ME PLEASE _run_pre screen=%s XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                   screen)
-        # XXX move this into the button handling somehow?
-        if screen == FINISH:
-            self.finish_registration()
-            return
-
-        if screen == ERROR_SCREEN:
-            self.goto_error_screen()
-            return
 
         self._set_screen(screen)
         async = self._screens[self._current_screen].pre()
@@ -417,134 +408,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
 
 class RegisterDialog(widgets.SubmanBaseWidget):
-    """
-    Registration Widget Screen
-
-    RegisterScreen is the parent widget of registration screens, and
-    also the base class of the firstboot rhsm_module.
-
-    RegisterScreen has a list of Screen subclasses.
-
-    Screen subclasses can be Screen, NonGuiScreen, or GuiScreen
-    classes. Only GuiScreen classes are user visible. NonGuiScreen
-    and subclasses are used for state transitions (a between screens
-    check for pools, for example)
-
-    The rhsmModule.apply() runs RegisterScreen.register().
-    RegisterScreen.register runs the current screens .apply().
-
-    A Screen.apply() will return the index of the next screen that
-    should be invoked (which may be a different screen, the same screen,
-    or the special numbers for DONT_CHANGE and FINISH.)
-
-    In firstboot, calling the firstboot modules .apply() results in calling
-    rhsm_module.moduleClass.apply() which calls the first Screen.apply()
-    (also self._current_screen).
-
-    After the Screen.apply(), RegisterScreen.register checks it's return
-    for DONT_CHANGE or FINISH.
-
-    If the apply returns a screen index, then the Screen.post() is called.
-    The return value is ignored.
-
-    The RegisterScreen.register calls RegisterScreen.run_pre() on the
-    screen index that the current_screen .apply() returned(i.e. the
-    next screen).
-
-    run_pre() checks that it's arg (the result of above apply(), what
-    is still currently the next screen) is not DONT_CHANGE/FINISH.
-
-    If not, then it calls self._set_screen() which updates
-    self._current_screen to point to the next screen.
-
-    run_pre() then calls the new current_screens's .pre()
-
-    .register()
-        next_screen = current_screen.apply()
-        current_screen.post()
-        RegisterScreen.run_pre(next_screen)
-        RegisterScreen._set_screen(next_screen)
-            current_screen = next_screen
-
-            Then if current_screen is a gui screen, the visible
-            gui will update with the new widgets.
-
-        The new current_screen has its pre() method invoked. pre()
-        methods may return an async representing that a request
-        has been called and a callback registered. If that's the case,
-        then RegisterScreen._set_screen() sets the current screen
-        to a progress screen.
-
-    The return value of RegisterScreen.run_pre() is ignored, and
-    RegisterScreen.register() returns False.
-
-    This returns to rhsm_login.apply(), where valid_registration is
-    set to the return value. valid_registration=True indicates a
-    succesful registration
-
-    If valid_registration=True, we are basically done with registeration.
-    But rhsm_login can't return from apply() yet, since that could
-    potential lead to firstboot ending if it's the last or only module.
-
-    gtk main loop iterations are run, mostly to let any threads finish
-    up and any idle loop thread watchers to dry up.
-
-    The return value of rhsm_login.apply() at this point is actualy
-    the _apply_result instance variable. Register Screens() are expected
-    to set this by calling their finish_registration() method. For
-    subscription-manager-gui that means RegisterScreen.finish_registration,
-    usually access as a Screens() self._parent.finish_registration.
-
-    For firstboot screens, self._parent will be rhsm_module.moduleClass
-    (also a subclass of RegisterScreen).
-
-    rhsm_module.finish_registration() will check the "failed" boolean,
-    and either return to a Screen() (CredentialsPage, atm). Or if
-    failed=True, it will also call RegisterScreen.finish_registration(),
-    that closes the gui window.
-
-    The UI flow is a result of the order of RegisterScreen._screens,
-    and the screen indexes returned by Screen.apply().
-
-    But, between the Screen activity call also change the flow, most
-    notably the results of any async calls and callbacks invoked from
-    the screens .pre()
-
-    A common case is the async callbacks error handling calling
-    self._parent.finish_registration(failed=True)
-
-    The async callback can also call RegisterScreen.pre_done() to send the
-    UI to a different screen. RHSM api call results that indicate multiple
-    choices for a sub would send flow to a chooseSub GuiScreen vs a
-    NonGuiScreen for attaching a sub, for example.
-
-    RegisterScreen.run_pre schedules async jobs, they get queued, and
-    wait for their callbacks. The callbacks then can use pre_done()
-    to finish the tasks the run_pre started. Typicaly the UI will
-    see the Progress screens in the meantime.
-
-    If going to screen requires an async task, run_pre starts it by
-    calling the new screens pre(), setting that screen to current (_set_screen),
-    and then setting the GuiScreen to the progress screens. Screen
-    transitions that don't need async tasks just return nothing from
-    their pre() and go to the next screen in the order in self._screens.
-
-    Note the the flow of firstboot through multiple modules is driven
-    by the return value of rhsm_login.apply(). firstboot itself maintains
-    a list of modules and a an ordered list of them. True goes to the
-    next screen, False stays. Except for RHEL6, where it is the opposite.
-
-    As of RHEL7.0+, none of that matters much, since rhsm_login is the
-    only module in firstboot.
-
-    """
 
     widget_names = ['register_dialog', 'register_dialog_main_vbox',
                     'register_progressbar', 'register_details_label',
                     'cancel_button', 'register_button', 'progress_label',
                     'dialog_vbox6']
     gui_file = "register_dialog"
-    __gtype_name__ = 'RegisterScreen'
+    __gtype_name__ = 'RegisterDialog'
 
     def __init__(self, backend, facts=None, callbacks=None):
         """
@@ -590,12 +460,14 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
     def initialize(self):
         self.register_widget.clear_screens()
+        self.register_widget.initialize()
         log.debug("RegisterScreen.initialize")
 
     def show(self):
         # initial-setup module skips this, since it results in a
         # new top level window that isn't reparented to the initial-setup
         # screen.
+
         self.register_dialog.show()
         log.debug("RegsiterScreen.show")
 
@@ -641,7 +513,7 @@ class AutobindWizard(RegisterDialog):
 
     def show(self):
         super(AutobindWizard, self).show()
-        self.register_widget._run_pre(SELECT_SLA_PAGE)
+        self.register_widget.change_screen(SELECT_SLA_PAGE)
 
     def _get_initial_screen(self):
         return SELECT_SLA_PAGE
