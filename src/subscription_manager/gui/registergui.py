@@ -227,7 +227,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self._current_screen = CHOOSE_SERVER_PAGE
 
         self.dry_run_result = None
-        self.skip_auto_bind = False
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -609,7 +608,7 @@ class PerformRegisterScreen(NoGuiScreen):
 
             if self._parent.info.get_property('activation-keys'):
                 self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
-            elif self._parent.skip_auto_bind:
+            elif self._parent.info.get_property('skip-auto-bind'):
                 self._parent.finish_registration()
             else:
                 self.emit('move-to-screen', SELECT_SLA_PAGE)
