@@ -173,6 +173,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
+    register_button_label = ga_GObject.property(type=str, default=_('Register'))
 
     def __init__(self, backend, facts, parent=None):
         super(RegisterWidget, self).__init__()
@@ -200,6 +201,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.details_label = self.register_details_label
         self.connect('notify::details-label-txt', self._on_details_label_txt_change)
         self.connect('notify::register-state', self._on_register_state_change)
+
+        self.register_notebook.connect('switch-page', self._on_switch_page)
 
         #widget
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
@@ -250,6 +253,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _get_initial_screen(self):
         return CHOOSE_SERVER_PAGE
 
+    # switch-page should be after the current screen is reset
+    def _on_switch_page(self, notebook, page, page_num):
+        log.debug("\n\n_on_switch_page, notebook=%s page=%s page_num=%s\n\n",
+                  notebook, page, page_num)
+        current_screen = self._screens[self._current_screen]
+        self.set_property('register-button-label', current_screen.button_label)
+
     def _on_username_password_change(self, *args):
         log.debug("on_username_password_change args=%s", args)
         self.backend.cp_provider.set_user_pass(self.info.username, self.info.password)
@@ -261,9 +271,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def _on_stay_on_screen(self, current_screen):
         log.debug("_on_stay_on_screen current_screen=%s", current_screen)
-
         self._set_screen(self._current_screen)
-        #current_screen.post()
 
     # TODO: replace most of the gui flow logic in the Screen subclasses with
     #       some state machine that drives them, possibly driving via signals
@@ -301,7 +309,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             # shouldn't need this bookeeping
             if self._screens[screen].needs_gui:
                 # FIXME: replace with a handler when we change notebook pages...
-                self._set_register_button_label(screen)
                 self.register_notebook.set_current_page(self._screens[screen].index)
         else:
             # 'next-page' property and move there on change?
@@ -315,8 +322,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("do_proceed args=%s", args)
         result = self._screens[self._current_screen].apply()
         log.debug("current screen.apply result=%s", result)
-
-    register = do_proceed
 
     def finish_registration(self):
         ga_GObject.source_remove(self.timer)
@@ -373,14 +378,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         elif state == SUBSCRIBING:
             self.progress_label.set_markup(_("<b>Attaching</b>"))
 
-    # RegisterDialog provide a callback to call when the nav button need to
-    # change. And or, use signals
-    def _set_register_button_label(self, screen):
-        pass
-        #button_label = self._screens[screen].button_label
-        # FIXME
-        #self._register_button_label_callback(button_label)
-
     def clear_screens(self):
         for screen in self._screens:
             screen.clear()
@@ -434,7 +431,12 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_widget.connect('attach-failure', self.on_attach_failure)
 
         # update window title on register state changes
-        self.register_widget.connect('notify::register-state', self._on_register_state_change)
+        self.register_widget.connect('notify::register-state',
+                                     self._on_register_state_change)
+
+        # update the 'next/register button on page change'
+        self.register_widget.connect('notify::register-button-label',
+                                       self._on_register_button_label_change)
 
         # initial-setup wants a attr named 'window'
         self.window = self.register_dialog
@@ -488,6 +490,10 @@ class RegisterDialog(widgets.SubmanBaseWidget):
             self.register_dialog.set_title(_("System Registration"))
         elif state == SUBSCRIBING:
             self.register_dialog.set_title(_("Subscription Attachment"))
+
+    def _on_register_button_label_change(self, obj, value):
+        register_label = obj.get_property('register-button-label')
+        self.register_button.set_label(register_label)
 
 
 class AutobindWizard(RegisterDialog):
@@ -575,12 +581,8 @@ class NoGuiScreen(ga_GObject.GObject):
 
 
 class ProgressScreen(NoGuiScreen):
-   # def __init__(self, parent):
-    #    ga_GObject.GObject.__init__(self)
-
     def pre(self):
         pass
-        # set progress label  from props?
 
 
 class PerformRegisterScreen(NoGuiScreen):
