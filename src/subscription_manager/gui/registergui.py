@@ -326,7 +326,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def finish_registration(self):
         ga_GObject.source_remove(self.timer)
 
-        self.emit_consumer_signal()
+        self.register_finished()
 
     def pre_done(self, next_screen):
         if next_screen == DONT_CHANGE:
@@ -355,7 +355,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def screen_error(self):
         self.emit('error')
 
-    def emit_consumer_signal(self):
+    def register_finished(self):
         self.emit('finished')
 
     # when we decide we can not complete registration
@@ -899,12 +899,17 @@ class SelectSLAScreen(Screen):
             if isinstance(error[1], ServiceLevelNotSupportedException):
                 OkDialog(_("Unable to auto-attach, server does not support service levels."),
                         parent=self._parent.parent)
+                # FIXME: is this a failure or a finish?
             elif isinstance(error[1], NoProductsException):
                 InfoDialog(_("No installed products on system. No need to attach subscriptions at this time."),
                            parent=self._parent.parent)
+                # we are finished, close the register window
+                self._parent.register_finished()
             elif isinstance(error[1], AllProductsCoveredException):
                 InfoDialog(_("All installed products are covered by valid entitlements. No need to attach subscriptions at this time."),
                            parent=self._parent.parent)
+                # We are finished, close the register window
+                self._parent.register_finished()
             elif isinstance(error[1], GoneException):
                 InfoDialog(_("Consumer has been deleted."), parent=self._parent.parent)
             else:
@@ -1492,6 +1497,7 @@ class AsyncBackend(object):
         except Exception:
             # Going to try to update certificates just in case we errored out
             # mid-way through a bunch of binds:
+            # FIXME: emit update-ent-certs signal
             try:
                 managerlib.fetch_certificates(self.backend.certlib)
             except Exception, cert_update_ex:
