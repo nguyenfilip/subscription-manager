@@ -129,12 +129,10 @@ class RegistrationBox(widgets.SubmanBaseWidget):
 
 class RegisterInfo(ga_GObject.GObject):
     #username = None
-    consumername = None
     activation_keys = None
     owner_key = None
     current_sla = None
     dry_run_result = None
-    skip_auto_bind = False
 
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
@@ -142,6 +140,8 @@ class RegisterInfo(ga_GObject.GObject):
     port = ga_GObject.property(type=str, default='')
     prefix = ga_GObject.property(type=str, default='')
     environment = ga_GObject.property(type=str, default='')
+    skip_auto_bind = ga_GObject.property(type=bool, default=False)
+    consumername = ga_GObject.property(type=str, default='')
 
     @property
     def identity(self):
@@ -225,8 +225,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # TODO: current_screen as property?
         self._current_screen = CHOOSE_SERVER_PAGE
 
-        self.username = None
-        self.consumername = None
         self.activation_keys = None
         self.owner_key = None
         self.environment = None
@@ -256,7 +254,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
         current_screen = self._screens[self._current_screen]
-        self.set_property('register-button-label', current_screen.button_label)
+        # NonGuiScreens have a None button label
+        if current_screen.button_label:
+            self.set_property('register-button-label', current_screen.button_label)
 
     def _on_username_password_change(self, *args):
         log.debug("on_username_password_change args=%s", args)
@@ -483,8 +483,15 @@ class RegisterDialog(widgets.SubmanBaseWidget):
             self.register_dialog.set_title(_("Subscription Attachment"))
 
     def _on_register_button_label_change(self, obj, value):
+        log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
         register_label = obj.get_property('register-button-label')
-        self.register_button.set_label(register_label)
+        log.debug('register_label=%s', register_label)
+        log.debug('self.register_button %s', self.register_button)
+
+        # FIXME: button_label can be None for NonGuiScreens. Seems like
+        #
+        if register_label:
+            self.register_button.set_label(register_label)
 
 
 class AutobindWizard(RegisterDialog):
@@ -608,7 +615,7 @@ class PerformRegisterScreen(NoGuiScreen):
         log.info("Registering to owner: %s environment: %s" %
                  (self._parent.owner_key, self._parent.environment))
 
-        self._parent.async.register_consumer(self._parent.consumername,
+        self._parent.async.register_consumer(self._parent.info.get_property('consumername'),
                                              self._parent.facts,
                                              self._parent.owner_key,
                                              self._parent.environment,
@@ -953,7 +960,7 @@ class OrganizationScreen(Screen):
         if len(owners) == 0:
             handle_gui_exception(None,
                                  _("<b>User %s is not able to register with any orgs.</b>") %
-                                   (self._parent.username),
+                                   (self._parent.info.get_property('username')),
                     self._parent.window)
             self._parent.register_error()
             return
@@ -968,7 +975,7 @@ class OrganizationScreen(Screen):
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
-        self._parent.async.get_owner_list(self._parent.username,
+        self._parent.async.get_owner_list(self._parent.info.get_property('username'),
                                           self._on_get_owner_list_cb)
         return True
 
@@ -1002,7 +1009,6 @@ class CredentialsScreen(Screen):
 
     def __init__(self, parent):
         super(CredentialsScreen, self).__init__(parent)
-
 
         self._initialize_consumer_name()
         self.registration_tip_label.set_label("<small>%s</small>" %
@@ -1041,31 +1047,28 @@ class CredentialsScreen(Screen):
         return False
 
     def apply(self):
-        self._username = self.account_login.get_text().strip()
-        self._password = self.account_password.get_text().strip()
-        self._consumername = self.consumer_name.get_text()
-        self._skip_auto_bind = self.skip_auto_bind.get_active()
+        username = self.account_login.get_text().strip()
+        password = self.account_password.get_text().strip()
+        consumername = self.consumer_name.get_text()
+        skip_auto_bind = self.skip_auto_bind.get_active()
 
-        if not self._validate_consumername(self._consumername):
-            #self.emit('move-to-screen', DONT_CHANGE)
+        if not self._validate_consumername(consumername):
             self.stay()
             return
 
         if not self._validate_account():
             self.stay()
-            #self.emit('move-to-screen', DONT_CHANGE)
             return
 
-        self._parent.info.username = self._username
-        self._parent.info.password = self._password
+        self._parent.info.set_property('username', username)
+        self._parent.info.set_property('password', password)
+        self._parent.info.set_property('skip-auto-bind', skip_auto_bind)
 
         self.emit('move-to-screen', OWNER_SELECT_PAGE)
 
     def post(self):
-        self._parent.username = self._username
-        self._parent.password = self._password
-        self._parent.consumername = self._consumername
-        self._parent.skip_auto_bind = self._skip_auto_bind
+        # FIXME: why was it also in post?
+        self._parent.info.set_property('consumername', self.consumer_name.get_text())
         self._parent.activation_keys = None
 
     def clear(self):
