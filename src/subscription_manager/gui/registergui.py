@@ -129,7 +129,6 @@ class RegistrationBox(widgets.SubmanBaseWidget):
 
 class RegisterInfo(ga_GObject.GObject):
     #username = None
-    activation_keys = None
     current_sla = None
     dry_run_result = None
 
@@ -142,6 +141,7 @@ class RegisterInfo(ga_GObject.GObject):
     skip_auto_bind = ga_GObject.property(type=bool, default=False)
     consumername = ga_GObject.property(type=str, default='')
     owner_key = ga_GObject.property(type=str, default='')
+    activation_keys = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
     @property
     def identity(self):
@@ -196,6 +196,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.info.connect("notify::hostname", self._on_connection_info_change)
         self.info.connect("notify::port", self._on_connection_info_change)
         self.info.connect("notify::prefix", self._on_connection_info_change)
+        self.info.connect("notify::activation-keys", self._on_activation_keys_change)
 
         # FIXME: change glade name
         self.details_label = self.register_details_label
@@ -225,8 +226,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # TODO: current_screen as property?
         self._current_screen = CHOOSE_SERVER_PAGE
 
-        self.activation_keys = None
-        self.environment = None
         self.current_sla = None
         self.dry_run_result = None
         self.skip_auto_bind = False
@@ -265,6 +264,15 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _on_connection_info_change(self, *args):
         log.debug("on_connection_info_change args=%s", args)
         self.backend.update()
+
+    def _on_activation_keys_change(self, obj, param):
+        log.debug("_on_activation_keys_change obj=%s param=%s", obj, param)
+        activation_keys = obj.get_property('activation-keys')
+
+        # Unset backend from attempting to use basic auth
+        if activation_keys:
+            self.backend.cp_provider.set_user_pass()
+            self.backend.update()
 
     def _on_stay_on_screen(self, current_screen):
         self._set_screen(self._current_screen)
@@ -600,7 +608,7 @@ class PerformRegisterScreen(NoGuiScreen):
             # trigger a id cert reload
             self.emit('identity-updated')
 
-            if self._parent.activation_keys:
+            if self._parent.info.get_property('activation-keys'):
                 self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
             elif self._parent.skip_auto_bind:
                 self._parent.finish_registration()
@@ -613,13 +621,13 @@ class PerformRegisterScreen(NoGuiScreen):
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
                  (self._parent.info.get_property('owner-key'),
-                  self._parent.environment))
+                  self._parent.info.get_property('environment')))
 
         self._parent.async.register_consumer(self._parent.info.get_property('consumername'),
                                              self._parent.facts,
                                              self._parent.info.get_property('owner-key'),
-                                             self._parent.environment,
-                                             self._parent.activation_keys,
+                                             self._parent.info.get_property('environment'),
+                                             self._parent.info.get_property('activation-keys'),
                                              self._on_registration_finished_cb)
 
         return True
@@ -911,13 +919,10 @@ class EnvironmentScreen(Screen):
 
     def set_environment(self, environment):
         log.debug("EnvScreen.set_environment %s", environment)
-        self._parent.environment = environment
-        self._parent.info.environment = environment
+        self._parent.info.set_property('environment', environment)
 
     def post(self):
-        log.debug("ENV.POST _parent.env=%s _p.i.env=%s",
-                  self._parent.environment, self._parent.info.environment)
-        #self._parent.environment = self._environment
+        log.debug("ENV.POST _p.i.env=%s", self._parent.info.get_property('environment'))
 
     def set_model(self, envs):
         environment_model = ga_Gtk.ListStore(str, str)
@@ -1066,7 +1071,9 @@ class CredentialsScreen(Screen):
     def post(self):
         # FIXME: why was it also in post?
         self._parent.info.set_property('consumername', self.consumer_name.get_text())
-        self._parent.activation_keys = None
+
+        # FIXME: REMOVE?
+#        self._parent.activation_keys = None
 
     def clear(self):
         self.account_login.set_text("")
@@ -1093,28 +1100,26 @@ class ActivationKeyScreen(Screen):
             self.consumer_entry.set_text(socket.gethostname())
 
     def apply(self):
-        self._activation_keys = self._split_activation_keys(
+        activation_keys = self._split_activation_keys(
             self.activation_key_entry.get_text().strip())
         owner_key = self.organization_entry.get_text().strip()
         consumername = self.consumer_entry.get_text().strip()
 
         if not self._validate_owner_key(owner_key):
-            #self.emit('move-to-screen', DONT_CHANGE)
             self.stay()
             return
 
-        if not self._validate_activation_keys(self._activation_keys):
-            #self.emit('move-to-screen', DONT_CHANGE)
+        if not self._validate_activation_keys(activation_keys):
             self.stay()
             return
 
-        if not self._validate_consumername(self._consumername):
-            #self.emit('move-to-screen', DONT_CHANGE)
+        if not self._validate_consumername(consumername):
             self.stay()
             return
 
         self._parent.info.set_property('consumername', consumername)
         self._parent.info.set_property('owner-key', owner_key)
+        self._parent.info.set_property('activation-keys', activation_keys)
         self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def _split_activation_keys(self, entry):
@@ -1148,13 +1153,16 @@ class ActivationKeyScreen(Screen):
         return False
 
     def post(self):
-        self._parent.activation_keys = self._activation_keys
+        pass
+        # FIXME: should be able to remove this
         # Environments aren't used with activation keys so clear any
         # cached value.
-        self._parent.environment = None
+        #self._parent.info.set_property('environment', '')
 
         # FIXME: this should be driver off of user/pass notify
-        self._backend.cp_provider.set_user_pass()
+        # and/or act key modify
+        #self._backend.cp_provider.set_user_pass()
+        #self.async.backend.update()
 
 
 class RefreshSubscriptionsScreen(NoGuiScreen):
@@ -1341,10 +1349,11 @@ class AsyncBackend(object):
 
             self.plugin_manager.run("pre_register_consumer", name=name,
                 facts=facts.get_facts())
-            retval = self.backend.cp_provider.get_basic_auth_cp().registerConsumer(name=name,
-                    facts=facts.get_facts(), owner=owner, environment=env,
-                    keys=activation_keys,
-                    installed_products=installed_mgr.format_for_server())
+            cp = self.backend.cp_provider.get_basic_auth_cp()
+            retval = cp.registerConsumer(name=name, facts=facts.get_facts(),
+                                         owner=owner, environment=env,
+                                         keys=activation_keys,
+                                          installed_products=installed_mgr.format_for_server())
             self.plugin_manager.run("post_register_consumer", consumer=retval,
                 facts=facts.get_facts())
 
