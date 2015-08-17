@@ -129,7 +129,6 @@ class RegistrationBox(widgets.SubmanBaseWidget):
 
 class RegisterInfo(ga_GObject.GObject):
     #username = None
-    current_sla = None
     dry_run_result = None
 
     username = ga_GObject.property(type=str, default='')
@@ -142,6 +141,7 @@ class RegisterInfo(ga_GObject.GObject):
     consumername = ga_GObject.property(type=str, default='')
     owner_key = ga_GObject.property(type=str, default='')
     activation_keys = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+    current_sla = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
     @property
     def identity(self):
@@ -226,7 +226,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # TODO: current_screen as property?
         self._current_screen = CHOOSE_SERVER_PAGE
 
-        self.current_sla = None
         self.dry_run_result = None
         self.skip_auto_bind = False
 
@@ -653,7 +652,7 @@ class PerformSubscribeScreen(NoGuiScreen):
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
         self._parent.async.subscribe(self._parent.identity.uuid,
-                                     self._parent.current_sla,
+                                     self._parent.info.get_property('current-sla'),
                                      self._parent.dry_run_result,
                                      self._on_subscribing_finished_cb)
 
@@ -811,7 +810,7 @@ class SelectSLAScreen(Screen):
 
         (current_sla, unentitled_products, sla_data_map) = result
 
-        self._parent.current_sla = current_sla
+        self._parent.info.set_property('current-sla', current_sla)
         log.debug("current_sla=%s", current_sla)
         log.debug("unentitled_products=%s", unentitled_products)
         log.debug("sla_data_map=%s", sla_data_map)
@@ -820,13 +819,12 @@ class SelectSLAScreen(Screen):
             # when we cannot fix any unentitled products:
             if current_sla is not None and \
                     not self._can_add_more_subs(current_sla, sla_data_map):
-                handle_gui_exception(None,
-                                     _("No available subscriptions at "
-                                     "the current service level: %s. "
-                                     "Please use the \"All Available "
-                                     "Subscriptions\" tab to manually "
-                                     "attach subscriptions.") % current_sla,
-                                    self._parent.parent)
+                msg = _("No available subscriptions at "
+                        "the current service level: %s. "
+                        "Please use the \"All Available "
+                        "Subscriptions\" tab to manually "
+                        "attach subscriptions.") % current_sla
+                show_error_window(msg, parent=self._parent.parent)
                 self._parent.attach_failure()
                 return
 
@@ -839,13 +837,12 @@ class SelectSLAScreen(Screen):
             return
         else:
             log.info("No suitable service levels found.")
-            handle_gui_exception(None,
-                                 _("No service level will cover all "
-                                 "installed products. Please manually "
-                                 "subscribe using multiple service levels "
-                                 "via the \"All Available Subscriptions\" "
-                                 "tab or purchase additional subscriptions."),
-                                 parent=self._parent.parent)
+            msg = _("No service level will cover all "
+                    "installed products. Please manually "
+                    "subscribe using multiple service levels "
+                    "via the \"All Available Subscriptions\" "
+                    "tab or purchase additional subscriptions.")
+            show_error_window(msg, parent=self._parent.parent)
             log.debug("gh, no suitable sla post hge %s", self._parent)
             self._parent.attach_failure()
 
