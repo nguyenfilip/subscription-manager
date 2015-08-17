@@ -947,6 +947,7 @@ class SelectSLAScreen(Screen):
                                  "via the \"All Available Subscriptions\" "
                                  "tab or purchase additional subscriptions."),
                                  parent=self._parent.parent)
+            log.debug("gh, no suitable sla post hge %s", self._parent)
             self._parent.attach_failure()
 
     def pre(self):

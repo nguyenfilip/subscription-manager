@@ -27,9 +27,9 @@ import warnings
 # functionality doesn't seem to exist in public api yet
 # Note that you do not see this on python2.7 systems as
 # deprecationWarnings are ignored by default
-warnings.filterwarnings(action="ignore",
-                        category=DeprecationWarning,
-                        message="^The dbus_bindings module is not public API and will go away soon.")
+#warnings.filterwarnings(action="ignore",
+#                        category=DeprecationWarning,
+#                        message="^The dbus_bindings module is not public API and will go away soon.")
 
 import sys
 import os
@@ -47,8 +47,9 @@ _ = gettext.gettext
 log = logging.getLogger("rhsm-app.subscription-manager-gui")
 
 try:
+    pass
     # python 2.7+ only
-    logging.captureWarnings(True)
+    #logging.captureWarnings(True)
 except AttributeError:
     pass
 
@@ -206,12 +207,13 @@ if __name__ == '__main__':
         main.main_window.connect('hide', ga_Gtk.main_quit)
 
         sys.exit(ga_Gtk.main() or 0)
-    except SystemExit, e:
+    except SystemExit:
         # this is a non-exceptional exception thrown by Python 2.4, just
         # re-raise, bypassing handle_exception
-        raise e
+        raise
     except KeyboardInterrupt:
         system_exit(0, "\nUser interrupted process.")
     except Exception, e:
         log.exception(e)
+        raise
         system_exit(1, e)
