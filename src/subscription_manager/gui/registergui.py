@@ -255,8 +255,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
-        log.debug("\n\n_on_switch_page, notebook=%s page=%s page_num=%s\n\n",
-                  notebook, page, page_num)
         current_screen = self._screens[self._current_screen]
         self.set_property('register-button-label', current_screen.button_label)
 
@@ -592,8 +590,8 @@ class PerformRegisterScreen(NoGuiScreen):
 
         try:
             managerlib.persist_consumer_cert(new_account)
-            # FIXME: property/signal
-            #self._backend.cs.force_cert_check()  # Ensure there isn't much wait time
+
+            # trigger a id cert reload
             self.emit('identity-updated')
 
             if self._parent.activation_keys:
@@ -963,14 +961,10 @@ class OrganizationScreen(Screen):
         if len(owners) == 1:
             self._owner_key = owners[0][0]
             # only one org, use it and skip the org selection screen
-            #self._parent.pre_done(ENVIRONMENT_SELECT_PAGE)
             self.emit('move-to-screen', ENVIRONMENT_SELECT_PAGE)
         else:
             self.set_model(owners)
-            # FIXME: we should be able to just not do anything here
-            # TESTHIS
             self.stay()
-            #self._parent.pre_done(DONT_CHANGE)
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
