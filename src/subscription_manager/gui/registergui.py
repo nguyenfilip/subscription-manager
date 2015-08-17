@@ -916,6 +916,7 @@ class SelectSLAScreen(Screen):
                 log.exception(error)
                 handle_gui_exception(error, _("Error subscribing"),
                                      self._parent.parent)
+            # Assume this is a recoverable error
             self._parent.attach_error()
             return
 
@@ -1068,9 +1069,11 @@ class OrganizationScreen(Screen):
 
         if len(owners) == 1:
             self._owner_key = owners[0][0]
+            # only one org, use it and skip the org selection screen
             self._parent.pre_done(ENVIRONMENT_SELECT_PAGE)
         else:
             self.set_model(owners)
+            # FIXME: we should be able to just not do anything here
             self._parent.pre_done(DONT_CHANGE)
 
     def pre(self):
