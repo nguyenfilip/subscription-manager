@@ -22,6 +22,7 @@ import sys
 from pyanaconda.ui.gui.spokes import NormalSpoke
 from pyanaconda.ui.common import FirstbootOnlySpokeMixIn
 from pyanaconda.ui.categories.system import SystemCategory
+from pyanaconda.ui.gui.utils import really_hide
 
 log = logging.getLogger(__name__)
 
@@ -69,8 +70,10 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         facts = inj.require(inj.FACTS)
         backend = managergui.Backend()
 
-        self.register_widget = registergui.RegisterWidget(backend, facts)
+        self.register_widget = registergui.RegisterWidget(backend, facts,
+                                                          parent=self.main_window)
         self.register_box = self.builder.get_object("register_box")
+        self.button_box = self.builder.get_object('navigation_button_box')
         self.proceed_button = self.builder.get_object('proceed_button')
         self.cancel_button = self.builder.get_object('cancel_button')
 
@@ -84,10 +87,11 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
         # initial-setup will likely
         self.register_widget.connect('finished', self.finished)
-        #self.register_widget.connect('register-error', self.on_register_error)
+        self.register_widget.connect('register-error', self.on_register_error)
         self.register_widget.connect('register-failure', self._on_register_failure)
-        #self.register_widget.connect('attach-error', self.on_attach_error)
+        self.register_widget.connect('attach-error', self.on_attach_error)
         self.register_widget.connect('attach-failure', self._on_attach_failure)
+        self.register_widget.connect('register-error-foo', self._on_register_error_foo)
 
         # update the 'next/register button on page change'
         self.register_widget.connect('notify::register-button-label',
@@ -103,6 +107,8 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     # callback to attach to RegisterWidgets finished signal
     def finished(self, button):
         self._done = True
+        self.register_widget.done()
+        really_hide(self.button_box)
 
     # Update gui widgets to reflect state of self.data
     # This could also be used to pre populate partial answers from a ks
@@ -155,18 +161,36 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
-        self.register_widget.emit('proceed', 42)
-        log.debug("post")
+        self.clear_info()
+        self.register_widget.emit('proceed')
+
+    # FIXME: REMOVE: replace on_register_error
+    def _on_register_error_foo(self, widget, msg):
+        log.debug("rhsm_gui _on_register_error_foo widget=%s msg=%s",
+                  widget, msg)
+        self.set_error(msg)
+
+    def on_register_error(self, args):
+        log.debug("register_dialog.on_register_error args=%s", args)
+        # FIXME: can we just ignore this for sm-gui?
+        self.register_widget.register_error_screen()
+
+    def on_attach_error(self, args):
+        log.debug("register_dialog.on_attach_error args=%s", args)
+        # FIXME: can we just ignore this for sm-gui?
+        self.register_widget.attach_error_screen()
 
     def _on_register_failure(self, args):
         # TODO: go to a failure screen, once we add it to RegisterWidget
         log.debug("_on_register_failure, args=%s", args)
+        # FIXME:
+        self.set_error("Register failed.")
 
     # If we get an 'attach-failure' signal, but suceeded in registering,
     # we can count that as 'completed'
     def _on_attach_failure(self, args):
         log.debug("_on_attach_failure, args=%s", args)
-        pass
+        self.set_error("Attach failed.")
 
     def _on_register_button_label_change(self, obj, value):
         log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
@@ -174,8 +198,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         log.debug('register_label=%s', register_label)
         log.debug('self.proceed_button %s', self.proceed_button)
 
-        # FIXME: button_label can be None for NonGuiScreens. Seems like
-        #
         if register_label:
             self.proceed_button.set_label(register_label)
 
@@ -184,4 +206,3 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         # If we are past registration, that's 'completed' enough
         if state != registergui.REGISTERING:
             self.completed = True
-
