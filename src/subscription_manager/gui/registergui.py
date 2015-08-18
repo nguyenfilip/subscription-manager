@@ -128,8 +128,6 @@ class RegistrationBox(widgets.SubmanBaseWidget):
 
 
 class RegisterInfo(ga_GObject.GObject):
-    #username = None
-    dry_run_result = None
 
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
@@ -142,6 +140,7 @@ class RegisterInfo(ga_GObject.GObject):
     owner_key = ga_GObject.property(type=str, default='')
     activation_keys = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
     current_sla = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+    dry_run_result = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
     @property
     def identity(self):
@@ -652,7 +651,7 @@ class PerformSubscribeScreen(NoGuiScreen):
         self._parent.set_property('details-label-txt', self.pre_message)
         self._parent.async.subscribe(self._parent.identity.uuid,
                                      self._parent.info.get_property('current-sla'),
-                                     self._parent.dry_run_result,
+                                     self._parent.info.get_property('dry-run-result'),
                                      self._on_subscribing_finished_cb)
 
         return True
@@ -696,15 +695,15 @@ class ConfirmSubscriptionsScreen(Screen):
         self.emit('move-to-screen', PERFORM_SUBSCRIBE_PAGE)
 
     def set_model(self):
-        self._dry_run_result = self._parent.dry_run_result
+        dry_run_result = self._parent.info.get_property('dry-run-result')
 
         # Make sure that the store is cleared each time
         # the data is loaded into the screen.
         self.store.clear()
-        self.sla_label.set_markup("<b>" + self._dry_run_result.service_level +
+        self.sla_label.set_markup("<b>" + dry_run_result.service_level +
                                   "</b>")
 
-        for pool_quantity in self._dry_run_result.json:
+        for pool_quantity in dry_run_result.json:
             self.store.append([pool_quantity['pool']['productName'],
                               PoolWrapper(pool_quantity['pool']).is_virt_only(),
                               str(pool_quantity['quantity'])])
@@ -730,8 +729,6 @@ class SelectSLAScreen(Screen):
         self.pre_message = _("Finding suitable service levels")
         self.button_label = _("Next")
 
-        self._dry_run_result = None
-
     def set_model(self, unentitled_prod_certs, sla_data_map):
         self.product_list_label.set_text(
                 self._format_prods(unentitled_prod_certs))
@@ -741,7 +738,9 @@ class SelectSLAScreen(Screen):
         # of the screen.
         for sla in reversed(sla_data_map.keys()):
             radio = ga_Gtk.RadioButton(group=group, label=sla)
-            radio.connect("toggled", self._radio_clicked, sla)
+            radio.connect("toggled",
+                          self._radio_clicked,
+                          (sla, sla_data_map))
             self.sla_radio_container.pack_start(radio, expand=False,
                                                 fill=False, padding=0)
             radio.show()
@@ -753,17 +752,20 @@ class SelectSLAScreen(Screen):
     def apply(self):
         self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
 
-    def post(self):
-        self._parent.dry_run_result = self._dry_run_result
-
     def clear(self):
         child_widgets = self.sla_radio_container.get_children()
         for child in child_widgets:
             self.sla_radio_container.remove(child)
 
-    def _radio_clicked(self, button, service_level):
+    def _radio_clicked(self, button, data):
+        log.debug("_on_radio_clicked button=%s data=%s",
+                  button, data)
+        sla, sla_data_map = data
+        log.debug("sla=%s sla_data_map=%s", sla, sla_data_map)
+
         if button.get_active():
-            self._dry_run_result = self._sla_data_map[service_level]
+            self._parent.info.set_property('dry-run-result',
+                                           sla_data_map[sla])
 
     def _format_prods(self, prod_certs):
         prod_str = ""
@@ -827,10 +829,10 @@ class SelectSLAScreen(Screen):
                 self._parent.attach_failure()
                 return
 
-            self._dry_run_result = sla_data_map.values()[0]
+            self._parent.info.set_property('dry-run-result',
+                                           sla_data_map.values()[0])
             self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
         elif len(sla_data_map) > 1:
-            self._sla_data_map = sla_data_map
             self.set_model(unentitled_products, sla_data_map)
             self.stay()
             return
