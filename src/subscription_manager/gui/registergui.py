@@ -278,16 +278,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _on_move_to_screen(self, current_screen, next_screen_id):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
                   current_screen, next_screen_id)
-        # run current_screen post()
-        # point to next_screen
-        # run next screens pre()
-        # if next_screen.pre() is async,
-        #    go progress screen
-
-        # FIXME: I think we can ditch post()
-        # Split into handling current screen post (the 'out') and
-        # the next screens pre() (the 'in')
-        current_screen.post()
 
         self.change_screen(next_screen_id)
 
@@ -324,10 +314,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.register_finished()
 
-    # for subman gui, we don't need to switch screens on error
-    # but for firstboot, we will go back to the info screen if
-    # we have it.
+    # TODO: now that this seems sorted, we could lump these back
+    #       together in a single error handler
     def register_error_screen(self):
+        """Public method to go to the default registration error screen."""
         log.debug("register_error_screen")
         self._set_screen(CHOOSE_SERVER_PAGE)
 
@@ -916,9 +906,6 @@ class EnvironmentScreen(Screen):
         log.debug("EnvScreen.set_environment %s", environment)
         self._parent.info.set_property('environment', environment)
 
-    def post(self):
-        log.debug("ENV.POST _p.i.env=%s", self._parent.info.get_property('environment'))
-
     def set_model(self, envs):
         environment_model = ga_Gtk.ListStore(str, str)
         for env in envs:
@@ -1060,15 +1047,9 @@ class CredentialsScreen(Screen):
         self._parent.info.set_property('username', username)
         self._parent.info.set_property('password', password)
         self._parent.info.set_property('skip-auto-bind', skip_auto_bind)
+        self._parent.info.set_property('consumername', consumername)
 
         self.emit('move-to-screen', OWNER_SELECT_PAGE)
-
-    def post(self):
-        # FIXME: why was it also in post?
-        self._parent.info.set_property('consumername', self.consumer_name.get_text())
-
-        # FIXME: REMOVE?
-#        self._parent.activation_keys = None
 
     def clear(self):
         self.account_login.set_text("")
@@ -1146,18 +1127,6 @@ class ActivationKeyScreen(Screen):
         self._parent.set_property('details-label-txt', self.pre_message)
         self.organization_entry.grab_focus()
         return False
-
-    def post(self):
-        pass
-        # FIXME: should be able to remove this
-        # Environments aren't used with activation keys so clear any
-        # cached value.
-        #self._parent.info.set_property('environment', '')
-
-        # FIXME: this should be driver off of user/pass notify
-        # and/or act key modify
-        #self._backend.cp_provider.set_user_pass()
-        #self.async.backend.update()
 
 
 class RefreshSubscriptionsScreen(NoGuiScreen):
@@ -1587,9 +1556,6 @@ class InfoScreen(Screen):
         else:
             log.debug("Skipping registration.")
             return FINISH
-
-    def post(self):
-        pass
 
     def _on_why_register_button_clicked(self, button):
         self.why_register_dialog.show()
