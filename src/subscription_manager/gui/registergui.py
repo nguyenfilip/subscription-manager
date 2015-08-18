@@ -41,7 +41,7 @@ from subscription_manager import managerlib
 from subscription_manager.utils import is_valid_server_info, MissingCaCertException, \
         parse_server_info, restart_virt_who
 
-from subscription_manager.gui.utils import format_exception
+from subscription_manager.gui.utils import format_exception, show_error_window
 from subscription_manager.gui.autobind import DryRunResult, \
         ServiceLevelNotSupportedException, AllProductsCoveredException, \
         NoProductsException
@@ -161,10 +161,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
                                 None, (int,)),
-                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error-old': (ga_GObject.SIGNAL_RUN_FIRST,
                               None, []),
-                    'register-error-foo': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
                               None, (ga_GObject.TYPE_PYOBJECT,)),
+                    'register-exception': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, (ga_GObject.TYPE_PYOBJECT,
+                                     ga_GObject.TYPE_PYOBJECT)),
                     'register-failure': (ga_GObject.SIGNAL_RUN_FIRST,
                                None, []),
                     'attach-error': (ga_GObject.SIGNAL_RUN_FIRST,
@@ -220,13 +223,17 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         for screen_class in screen_classes:
             screen = screen_class(parent=self)
-            screen.connect('move-to-screen', self._on_move_to_screen)
-            screen.connect('stay-on-screen', self._on_stay_on_screen)
-            screen.connect('register-error-foo', self._on_register_error_foo)
             self._screens.append(screen)
             if screen.needs_gui:
+                screen_widget = ScreenWidget.from_screen(screen)
+                screen_widget.connect('move-to-screen', self._on_move_to_screen)
+                screen_widget.connect('stay-on-screen', self._on_stay_on_screen)
+                screen_widget.connect('register-error',
+                                    self._on_register_error)
+                screen_widget.connect('register-exception',
+                                    self._on_register_exception)
                 screen.index = self.register_notebook.append_page(
-                        screen.container, tab_label=None)
+                        screen_widget, tab_label=None)
 
         self.initial_screen = CHOOSE_SERVER_PAGE
         # TODO: current_screen as property?
@@ -237,10 +244,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.register_widget.show()
 
+    def do_register_error_foo(self, arg):
+        print "RegisterWidget do_register_error_Foo", arg
+
     def initialize(self):
         log.debug("RegisterWidget.initialize")
         self.set_initial_screen()
-        self.clear_screens()
+        #self.clear_screens()
         self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
         self.register_widget.show_all()
 
@@ -271,10 +281,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         if activation_keys:
             self.backend.cp_provider.set_user_pass()
             self.backend.update()
-
-    def _on_register_error_foo(self, widget, msg):
-        log.debug("_on_register_error_foo widget=%s msg=%s", widget, msg)
-        self.emit('register-error-foo', msg)
 
     def _on_stay_on_screen(self, current_screen):
         self._set_screen(self._current_screen)
@@ -353,6 +359,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def register_failure(self):
         self.emit('register-failure')
 
+    def _on_register_error(self, widget, msg):
+        log.debug("_on_register_error_foo widget=%s msg=%s screen_id=%s",
+                  widget, msg, widget.screen_id)
+        self.emit('register-error-foo', msg)
+
+    def _on_register_exception(self, widget, exc, msg):
+        log.debug("_on_register_error_foo widget=%s msg=%s screen_id=%s exc=%s",
+                  widget, msg, widget.screen_id, exc)
+        self.emit('register-error-exception', msg, exc)
+
     # when we hit a recoverable error during registration
     def register_error(self):
         self.emit('register-error')
@@ -428,6 +444,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_widget.connect('register-failure', self.on_register_failure)
         self.register_widget.connect('attach-error', self.on_attach_error)
         self.register_widget.connect('attach-failure', self.on_attach_failure)
+        self.register_widget.connect('register-error-foo', self._on_register_error_foo)
 
         # update window title on register state changes
         self.register_widget.connect('notify::register-state',
@@ -459,10 +476,16 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_dialog.hide()
         return True
 
+    # FIXME: REMOVE: replace on_register_error
+    def _on_register_error_foo(self, widget, msg):
+        log.debug("rhsm_gui _on_register_error_foo widget=%s msg=%s error_screen=%s",
+                  widget, msg, widget.error_screen)
+        show_error_window(msg)
+
     def on_register_error(self, args):
         log.debug("register_dialog.on_register_error args=%s", args)
         # FIXME: can we just ignore this for sm-gui?
-        self.register_widget.register_error_screen()
+        #self.register_widget.register_error_screen()
 
     def on_register_failure(self, args):
         log.debug("register_dialog.on_register_failure args=%s", args)
@@ -523,14 +546,6 @@ class Screen(widgets.SubmanBaseWidget):
     widget_names = ['container']
     gui_file = None
 
-    # TODO: replace page int with class enum
-    __gsignals__ = {'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
-                                 None, []),
-                    'register-error-foo': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, (ga_GObject.TYPE_PYOBJECT,)),
-                    'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
-                                     None, (int,))}
-
     def __init__(self, parent):
         super(Screen, self).__init__()
         log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
@@ -542,19 +557,40 @@ class Screen(widgets.SubmanBaseWidget):
         self._parent = parent
         self._error_screen = self.index
 
+
+class ScreenWidget(ga_Gtk.Box):
+    screen_class = Screen
+
+    # TODO: replace page int with class enum
+    __gsignals__ = {'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                                 None, []),
+                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, (ga_GObject.TYPE_PYOBJECT,)),
+                    'register-exception': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, (ga_GObject.TYPE_PYOBJECT,
+                                     ga_GObject.TYPE_PYOBJECT)),
+                    'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                                     None, (int,))}
+
+    @classmethod
+    def from_screen(cls, screen):
+        widget = cls()
+        widget.screen = screen
+        widget.pack_start(screen.container,
+                          True, True, 0)
+        return widget
+
     # FIXME: rename to signaly
-    def show_error_dialog(self, msg, parent=None):
+    def emit_error(self, msg, parent=None):
         log.debug("show_error_dialog msg=%s parent=%s", msg, parent)
         self.emit('register-error-foo', msg)
 
-    def handle_gui_exception(self, error, msg, parent=None):
-        log.debug("handle_gui_exception error=%s msg=%s parent=%s", error, msg, parent)
-        message = format_exception(error, msg)
-        self.emit('register-error-foo', message)
+    def emit_exception(self, exc, msg, parent=None):
+        log.debug("handle_gui_exception exc=%s msg=%s parent=%s", exc, msg, parent)
+        self.emit('register-exception', exc, msg)
 
     def stay(self):
         self.emit('stay-on-screen')
-        #self.emit('move-to-screen', DONT_CHANGE)
 
     def pre(self):
         return False
@@ -619,6 +655,7 @@ class ProgressScreen(NoGuiScreen):
 
 
 class PerformRegisterScreen(NoGuiScreen):
+    screen_id = PERFORM_REGISTER_PAGE
 
     def __init__(self, parent):
         super(PerformRegisterScreen, self).__init__(parent)
@@ -664,6 +701,7 @@ class PerformRegisterScreen(NoGuiScreen):
 
 
 class PerformSubscribeScreen(NoGuiScreen):
+    screen_id = PERFORM_SUBSCRIBE_PAGE
 
     def __init__(self, parent):
         super(PerformSubscribeScreen, self).__init__(parent)
@@ -697,6 +735,7 @@ class ConfirmSubscriptionsScreen(Screen):
                                           'sla_label']
 
     gui_file = "confirmsubs"
+    screen_id = CONFIRM_SUBS_PAGE
 
     def __init__(self, parent):
 
@@ -759,6 +798,7 @@ class SelectSLAScreen(Screen):
                                           'sla_radio_container',
                                           'owner_treeview']
     gui_file = "selectsla"
+    screen_id = SELECT_SLA_PAGE
 
     def __init__(self, parent):
         super(SelectSLAScreen, self).__init__(parent)
@@ -910,6 +950,7 @@ class SelectSLAScreen(Screen):
 class EnvironmentScreen(Screen):
     widget_names = Screen.widget_names + ['environment_treeview']
     gui_file = "environment"
+    screen_id = ENVIRONMENT_SELECT_PAGE
 
     def __init__(self, parent):
         super(EnvironmentScreen, self).__init__(parent)
@@ -973,6 +1014,7 @@ class EnvironmentScreen(Screen):
 class OrganizationScreen(Screen):
     widget_names = Screen.widget_names + ['owner_treeview']
     gui_file = "organization"
+    screen_id = OWNER_SELECT_PAGE
 
     def __init__(self, parent):
         super(OrganizationScreen, self).__init__(parent)
@@ -1042,6 +1084,7 @@ class CredentialsScreen(Screen):
                                           'registration_header_label']
 
     gui_file = "credentials"
+    screen_id = CREDENTIALS_PAGE
 
     def __init__(self, parent):
         super(CredentialsScreen, self).__init__(parent)
@@ -1121,6 +1164,7 @@ class ActivationKeyScreen(Screen):
                 'consumer_entry',
         ]
     gui_file = "activation_key"
+    screen_id = ACTIVATION_KEY_PAGE
 
     def __init__(self, parent):
         super(ActivationKeyScreen, self).__init__(parent)
@@ -1188,6 +1232,7 @@ class ActivationKeyScreen(Screen):
 
 
 class RefreshSubscriptionsScreen(NoGuiScreen):
+    screen_id = REFRESH_SUBSCRIPTIONS_PAGE
 
     def __init__(self, parent):
         super(RefreshSubscriptionsScreen, self).__init__(parent)
@@ -1213,6 +1258,7 @@ class ChooseServerScreen(Screen):
                                           'default_button', 'choose_server_label',
                                           'activation_key_checkbox']
     gui_file = "choose_server"
+    screen_id = CHOOSE_SERVER_PAGE
 
     def __init__(self, parent):
 
