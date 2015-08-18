@@ -765,6 +765,8 @@ class SelectSLAScreen(Screen):
         return prod_str
 
     # so much for service level simplifying things
+    # FIXME: this could be split into 'on_get_all_service_levels_cb' and
+    #        and 'on_get_service_levels_cb'
     def _on_get_service_levels_cb(self, result, error=None):
         # The parent for the dialogs is set to the grandparent window
         # (which is MainWindow) because the parent window is closed
@@ -1365,6 +1367,16 @@ class AsyncBackend(object):
 
     # This guy is really ugly to run in a thread, can we run it
     # in the main thread with just the network stuff threaded?
+
+    # get_consumer
+    # get_service_level_list
+    # update_consumer
+    #  action_client
+    #    update_installed_products
+    #    update_facts
+    #    update_other_action_client_stuff
+    # for sla in available_slas:
+    #   get_dry_run_bind for sla
     def _find_suitable_service_levels(self, consumer_uuid, facts):
 
         # FIXME:
@@ -1406,6 +1418,8 @@ class AsyncBackend(object):
 
         for sla in available_slas:
             dry_run_json = self.backend.cp_provider.get_consumer_auth_cp().dryRunBind(consumer_uuid, sla)
+
+            # FIXME: are we modifying cert_sorter (self.backend.cs) state here?
             dry_run = DryRunResult(sla, dry_run_json, self.backend.cs)
 
             # If we have a current SLA for this system, we do not need
@@ -1413,6 +1427,8 @@ class AsyncBackend(object):
             # this wizard:
             if current_sla or dry_run.covers_required_products():
                 suitable_slas[sla] = dry_run
+
+        # why do we call cert_sorter stuff in the return?
         return (current_sla, self.backend.cs.unentitled_products.values(), suitable_slas)
 
     def _find_service_levels(self, consumer_uuid, facts, callback):
