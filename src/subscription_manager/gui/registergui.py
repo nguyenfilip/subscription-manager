@@ -225,8 +225,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # TODO: current_screen as property?
         self._current_screen = CHOOSE_SERVER_PAGE
 
-        self.dry_run_result = None
-
         # FIXME: modify property instead
         self.callbacks = []
 
@@ -700,6 +698,10 @@ class ConfirmSubscriptionsScreen(Screen):
         # Make sure that the store is cleared each time
         # the data is loaded into the screen.
         self.store.clear()
+
+        if not dry_run_result:
+            return
+
         self.sla_label.set_markup("<b>" + dry_run_result.service_level +
                                   "</b>")
 
@@ -850,7 +852,6 @@ class SelectSLAScreen(Screen):
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
         self._parent.set_property('register-state', SUBSCRIBING)
-        #set_state(SUBSCRIBING)
         self._parent.identity.reload()
         self._parent.async.find_service_levels(self._parent.identity.uuid,
                                                self._parent.facts,
