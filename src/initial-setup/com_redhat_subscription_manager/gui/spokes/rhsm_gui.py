@@ -45,7 +45,7 @@ __all__ = ["RHSMSpoke"]
 
 
 class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
-    buildrObjects = ["RHSMSpokeWindow", "RHSMSpokeWindow-action_area1"]
+    buildrObjects = ["RHSMSpokeWindow"]
 
     mainWidgetName = "RHSMSpokeWindow"
 
@@ -69,53 +69,119 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         facts = inj.require(inj.FACTS)
         backend = managergui.Backend()
 
-        self._registergui = registergui.RegisterScreen(backend, facts,
-                                                       callbacks=[self.finished])
-        self._action_area = self.builder.get_object("RHSMSpokeWindow-action_area1")
-        self._register_box = self._registergui.dialog_vbox6
+        self.register_widget = registergui.RegisterWidget(backend, facts)
+        self.register_box = self.builder.get_object("register_box")
+        self.proceed_button = self.builder.get_object('proceed_button')
+        self.cancel_button = self.builder.get_object('cancel_button')
 
-        # we have a ref to _register_box, but need to remove it from
-        # the regustergui.window (a GtkDialog), and add it to the main
-        # box in the action area of our initial-setup screen.
-        self._registergui.window.remove(self._register_box)
-        self._action_area.pack_end(self._register_box, True, True, 0)
-        self._action_area.show()
-        self._register_box.show_all()
-        self._registergui.initialize()
+        self.register_box.pack_start(self.register_widget.register_widget,
+                                     True, True, 0)
 
-    def finished(self):
-        self._registergui.done()
+        # Hook up the nav buttons in the gui
+        # TODO: add a 'start over'?
+        self.proceed_button.connect('clicked', self._on_register_button_clicked)
+        self.cancel_button.connect('clicked', self.cancel)
+
+        # initial-setup will likely
+        self.register_widget.connect('finished', self.finished)
+        #self.register_widget.connect('register-error', self.on_register_error)
+        self.register_widget.connect('register-failure', self._on_register_failure)
+        #self.register_widget.connect('attach-error', self.on_attach_error)
+        self.register_widget.connect('attach-failure', self._on_attach_failure)
+
+        # update the 'next/register button on page change'
+        self.register_widget.connect('notify::register-button-label',
+                                       self._on_register_button_label_change)
+
+        # update completed and status on register state changes
+        self.register_widget.connect('notify::register-state',
+                                     self._on_register_state_change)
+
+        self.register_box.show_all()
+        self.register_widget.initialize()
+
+    # callback to attach to RegisterWidgets finished signal
+    def finished(self, button):
         self._done = True
 
     # Update gui widgets to reflect state of self.data
+    # This could also be used to pre populate partial answers from a ks
+    # or answer file
     def refresh(self):
         log.debug("data.addons.com_redhat_subscription_manager %s",
                   self.data.addons.com_redhat_subscription_manager)
 
         pass
 
+    # take info from the gui widgets and set into the self.data
     def apply(self):
         self.data.addons.com_redhat_subscription_manager.text = \
             "System is registered to Red Hat Subscription Management."
 
+    # when the spoke is left, then can run anything that happens
     def execute(self):
         pass
 
+    def cancel(self, button):
+        # TODO: clear out settings and restart?
+        # TODO: attempt to undo the REST api calls we've made?
+        pass
+
+    # A property indicating the spoke is ready to be visited. This
+    # could depend on other modules or waiting for internal state to be setup.
     @property
     def ready(self):
         return True
 
+    # Indicate if all the mandotory actions are completed
     @property
     def completed(self):
+        # TODO: tie into register_widget.info.register-state
         return self._done
 
+    # indicate if the module has to be completed before initial-setup is done.
     @property
     def mandatory(self):
         return False
 
+    # A user facing string showing a summary of the status. This is displayed
+    # under the spokes name on it's hub.
     @property
     def status(self):
         if self._done:
             return "System is registered to RHSM."
         else:
             return "System is not registered to RHSM."
+
+    def _on_register_button_clicked(self, button):
+        log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
+        self.register_widget.emit('proceed', 42)
+        log.debug("post")
+
+    def _on_register_failure(self, args):
+        # TODO: go to a failure screen, once we add it to RegisterWidget
+        log.debug("_on_register_failure, args=%s", args)
+
+    # If we get an 'attach-failure' signal, but suceeded in registering,
+    # we can count that as 'completed'
+    def _on_attach_failure(self, args):
+        log.debug("_on_attach_failure, args=%s", args)
+        pass
+
+    def _on_register_button_label_change(self, obj, value):
+        log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
+        register_label = obj.get_property('register-button-label')
+        log.debug('register_label=%s', register_label)
+        log.debug('self.proceed_button %s', self.proceed_button)
+
+        # FIXME: button_label can be None for NonGuiScreens. Seems like
+        #
+        if register_label:
+            self.proceed_button.set_label(register_label)
+
+    def _on_register_state_change(self, obj, value):
+        state = obj.get_property('register-state')
+        # If we are past registration, that's 'completed' enough
+        if state != registergui.REGISTERING:
+            self.completed = True
+

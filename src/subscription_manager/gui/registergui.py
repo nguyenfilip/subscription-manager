@@ -405,6 +405,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_button.connect('clicked', self._on_register_button_clicked)
         self.cancel_button.connect('clicked', self.cancel)
 
+        # initial-setup will likely
         self.register_widget.connect('finished', self.cancel)
         self.register_widget.connect('register-error', self.on_register_error)
         self.register_widget.connect('register-failure', self.on_register_failure)
@@ -419,10 +420,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_widget.connect('notify::register-button-label',
                                        self._on_register_button_label_change)
 
-        # initial-setup wants a attr named 'window'
-        self.window = self.register_dialog
-
-        # XXX needed by firstboot
+        # FIXME: needed by firstboot
         self.password = None
 
     def initialize(self):
@@ -495,6 +493,13 @@ class AutobindWizard(RegisterDialog):
         self.register_widget.change_screen(SELECT_SLA_PAGE)
 
 
+# TODO: Screen could be a container widget, that has the rest of the gui as
+#       a child. That way, we could add the Screen class to the
+#       register_notebook directly, and follow up to the parent the normal
+#       way. Then we could stop passing 'parent' around. And RegsiterInfo
+#       could be on the parent register_notebook. I think the various GtkDialogs
+#       for error handling (handle_gui_exception, etc) would also find it by
+#       default.
 class Screen(widgets.SubmanBaseWidget):
     widget_names = ['container']
     gui_file = None
@@ -1417,9 +1422,14 @@ class AsyncBackend(object):
         action_client.update()
 
         for sla in available_slas:
+
+            # TODO: what kind of madness would happen if we did a couple of
+            # these in parallel in seperate threads?
             dry_run_json = self.backend.cp_provider.get_consumer_auth_cp().dryRunBind(consumer_uuid, sla)
 
             # FIXME: are we modifying cert_sorter (self.backend.cs) state here?
+            # FIXME: it's only to get the unentitled products list, can pass
+            #        that in
             dry_run = DryRunResult(sla, dry_run_json, self.backend.cs)
 
             # If we have a current SLA for this system, we do not need
