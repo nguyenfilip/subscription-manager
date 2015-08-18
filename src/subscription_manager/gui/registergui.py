@@ -139,6 +139,8 @@ class RegisterInfo(ga_GObject.GObject):
     consumername = ga_GObject.property(type=str, default='')
     owner_key = ga_GObject.property(type=str, default='')
     activation_keys = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+
+    # split into AttachInfo or FindSlaInfo?
     current_sla = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
     dry_run_result = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
@@ -222,8 +224,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                 screen.index = self.register_notebook.append_page(
                         screen.container, tab_label=None)
 
+        self.initial_screen = CHOOSE_SERVER_PAGE
         # TODO: current_screen as property?
-        self._current_screen = CHOOSE_SERVER_PAGE
+        self._current_screen = self.initial_screen
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -238,11 +241,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.register_widget.show_all()
 
     def set_initial_screen(self):
-        target = self._get_initial_screen()
-        self._set_screen(target)
-
-    def _get_initial_screen(self):
-        return CHOOSE_SERVER_PAGE
+        self._set_screen(self.initial_screen)
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
@@ -408,7 +407,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_widget = RegisterWidget(backend, facts, parent=self.register_dialog)
         # Ensure that we start on the first page and that
         # all widgets are cleared.
-        self.register_widget.set_initial_screen()
         self.register_widget.initialize()
 
         self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
@@ -500,13 +498,11 @@ class AutobindWizard(RegisterDialog):
 
     def __init__(self, backend, facts, parent):
         super(AutobindWizard, self).__init__(backend, facts, parent)
+        self.initial_screen = SELECT_SLA_PAGE
 
     def show(self):
         super(AutobindWizard, self).show()
         self.register_widget.change_screen(SELECT_SLA_PAGE)
-
-    def _get_initial_screen(self):
-        return SELECT_SLA_PAGE
 
 
 class Screen(widgets.SubmanBaseWidget):
