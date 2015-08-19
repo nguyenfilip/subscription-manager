@@ -23,6 +23,7 @@ import socket
 import sys
 import threading
 
+import pprint
 
 from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.ga import GObject as ga_GObject
@@ -222,6 +223,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.connect('notify::details-label-txt', self._on_details_label_txt_change)
         self.connect('notify::register-state', self._on_register_state_change)
 
+        # To update the 'next/register' button based on the new page
         self.register_notebook.connect('switch-page', self._on_switch_page)
 
         #widget
@@ -247,6 +249,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.initial_screen = CHOOSE_SERVER_PAGE
         # TODO: current_screen as property?
         self._current_screen = self.initial_screen
+        self._previous_screen = self.initial_screen
+
+        # history of screen transitions including NoGuiScreen
+        self._screen_transitions = []
+        # history of notebook page transitions
+        self._notebook_transitions = []
+
+        # the list of gui notebook pages we encountered, mostly
+        # for the previous non-progess, not NonGuiScreen
+        self._gui_pages = []
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -270,6 +282,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         if current_screen.button_label:
             self.set_property('register-button-label', current_screen.button_label)
 
+    # HMMM: If the connect/backend/async, and the auth info is composited into
+    #       the same GObject, these could be class closure handlers
     def _on_username_password_change(self, *args):
         log.debug("on_username_password_change args=%s", args)
         self.backend.cp_provider.set_user_pass(self.info.username, self.info.password)
@@ -306,6 +320,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
                   current_screen, next_screen_id)
 
+        if next_screen_id > PROGRESS_PAGE:
+            self._prev_real_screen = current_screen
+
         self.change_screen(next_screen_id)
 
     def change_screen(self, next_screen_id):
@@ -318,14 +335,42 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def _set_screen(self, screen):
         log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
+        next_notebook_page = screen
+        next_screen = screen
+
+        current_notebook_page = self.register_notebook.get_property('page')
+        current_screen = self._current_screen
+
         if screen > PROGRESS_PAGE:
             self._current_screen = screen
             # FIXME: If we just add ProgressPage in the screen order, we
             # shouldn't need this bookeeping
             if self._screens[screen].needs_gui:
-                self.register_notebook.set_current_page(self._screens[screen].index)
+                next_notebook_page = self._screens[screen].index
         else:
-            self.register_notebook.set_current_page(screen + 1)
+            next_notebook_page = screen + 1
+
+        log.debug("Moving from notebook page: %s to page: %s",
+                  current_notebook_page, next_notebook_page)
+
+        self._notebook_transitions.append((current_notebook_page,
+                                           next_notebook_page))
+        self._screen_transitions.append((current_screen, next_screen))
+
+        log.debug("Moving notebook to page %s", next_notebook_page)
+        self.register_notebook.set_current_page(next_notebook_page)
+
+        log.debug("TRANS page: %s", pprint.pformat(self._notebook_transitions))
+        log.debug("TRANS screen: %s", pprint.pformat(self._screen_transitions))
+
+        self.last_non_prog_page = self._notebook_transitions[-1]
+        pages = []
+        for page in range(self.register_notebook.get_n_pages()):
+            pages.append(self.register_notebook.get_nth_page(page))
+
+        log.debug("notebook pages: %s", pprint.pformat(pages))
+
+    def last_non_progres_notebook_page(
 
     # FIXME: figure out to determine we are on first screen, then this
     # could just be 'move-to-screen', next screen
@@ -828,6 +873,7 @@ class SelectSLAScreen(Screen):
                   result, error)
         if error is not None:
             if isinstance(error[1], ServiceLevelNotSupportedException):
+                # TODO: handle these with props/signals, ditch the self._parent
                 OkDialog(_("Unable to auto-attach, server does not support service levels."),
                         parent=self._parent.parent_window)
                 # HMM: if we make the ok a register-error as well, we may get
