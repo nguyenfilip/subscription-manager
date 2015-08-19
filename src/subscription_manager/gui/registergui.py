@@ -144,10 +144,13 @@ class RegisterInfo(ga_GObject.GObject):
 
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
+
     hostname = ga_GObject.property(type=str, default='')
     port = ga_GObject.property(type=str, default='')
     prefix = ga_GObject.property(type=str, default='')
+
     environment = ga_GObject.property(type=str, default='')
+
     skip_auto_bind = ga_GObject.property(type=bool, default=False)
     consumername = ga_GObject.property(type=str, default='')
     owner_key = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
@@ -285,19 +288,15 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self.backend.cp_provider.set_user_pass()
             self.backend.update()
 
-    def _on_register_error(self, widget, msg, exc_list):
-        log.debug("_on_register_error_foo widget=%s msg=%s exc_list=%s",
-                  widget, msg, exc_list)
-        self.emit('register-error', msg, exc_list)
+    def _on_register_error(self, obj, msg, exc_info):
+        log.debug("_on_register_error obj=%s msg=%s exc_info=%s",
+                  obj, msg, exc_info)
+        # Now emit a new signal for the top level window to handle
+        self.emit('register-error', msg, exc_info)
         return False
 
     def _on_stay_on_screen(self, current_screen):
         self._set_screen(self._current_screen)
-
-    def show_error_dialog(self, msg, parent=None):
-        print "\n\n\n\nFIXME rw.show_error_dialog\n\n\n"
-        log.debug("show_error_dialog msg=%S parent=%s", msg, parent)
-        self.emit('register-error-foo', msg, None)
 
     # TODO: replace most of the gui flow logic in the Screen subclasses with
     #       some state machine that drives them, possibly driving via signals
@@ -555,15 +554,6 @@ class Screen(widgets.SubmanBaseWidget):
         self._parent = parent
         self._error_screen = self.index
 
-    # FIXME: rename to signaly
-    def show_error_dialog(self, msg, parent=None):
-        log.debug("show_error_dialog msg=%s parent=%s", msg, parent)
-        self.emit('register-error', msg, None)
-
-    def handle_gui_exception(self, error, msg, parent=None):
-        log.debug("handle_gui_exception error=%s msg=%s parent=%s", error, msg, parent)
-        self.emit('register-error', msg, error)
-
     def stay(self):
         self.emit('stay-on-screen')
         #self.emit('move-to-screen', DONT_CHANGE)
@@ -606,14 +596,7 @@ class NoGuiScreen(ga_GObject.GObject):
         self._error_screen = None
         self.pre_message = "Default Pre Message"
 
-    # FIXME: rename to signaly
-    def show_error_dialog(self, msg, parent=None):
-        log.debug("show_error_dialog msg=%s parent=%s", msg, parent)
-        self.emit('register-error', msg, None)
-
-    def handle_gui_exception(self, error, msg, parent=None):
-        log.debug("handle_gui_exception msg=%s parent=%s", error, msg, parent)
-        self.emit('register-error', msg, error)
+    # FIXME: a do_register_error could be used for logging?
 
     def pre(self):
         return True
@@ -641,9 +624,13 @@ class PerformRegisterScreen(NoGuiScreen):
 
     def _on_registration_finished_cb(self, new_account, error=None):
         if error is not None:
-            self.handle_gui_exception(error, REGISTER_ERROR,
-                                 self._parent.parent_window)
-            self._parent.register_error()
+            log.debug("_on_registration_finished_cb new_account=%s error=%s",
+                      new_account, error)
+            self.emit('register-error',
+                      REGISTER_ERROR,
+                      error)
+            # TODO: register state
+            #self._parent.register_error()
             return
 
         try:
@@ -654,14 +641,16 @@ class PerformRegisterScreen(NoGuiScreen):
 
             if self._parent.info.get_property('activation-keys'):
                 self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
+                return
             elif self._parent.info.get_property('skip-auto-bind'):
-                self._parent.finish_registration()
+                self.emit('register-finished')
+                return
             else:
                 self.emit('move-to-screen', SELECT_SLA_PAGE)
+                return
         except Exception, e:
-            self.handle_gui_exception(e, REGISTER_ERROR,
-                                 self._parent.parent_window)
-            self._parent.register_error()
+            # hint: register error, back to creds?
+            self.emit('register-error', REGISTER_ERROR, e)
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
@@ -845,25 +834,30 @@ class SelectSLAScreen(Screen):
                 # wacky ordering if the register-error is followed immed by a
                 # register-finished?
                 self.emit('register-finished')
+                return
             elif isinstance(error[1], NoProductsException):
                 InfoDialog(_("No installed products on system. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
-                # we are finished, close the register window
                 self.emit('register-finished')
+                return
             elif isinstance(error[1], AllProductsCoveredException):
                 InfoDialog(_("All installed products are covered by valid entitlements. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
-                # We are finished, close the register window
                 self.emit('register-finished')
+                return
             elif isinstance(error[1], GoneException):
+                # FIXME: shoudl we log here about deleted consumer or
+                #        did we do that when we created GoneException?
                 InfoDialog(_("Consumer has been deleted."),
                            parent=self._parent.parent_window)
+                return
                 # TODO: where we should go from here?
             else:
                 log.exception(error)
-                self.emit('register-error', _("Error subscribing"), error)
-
-            return
+                self.emit('register-error',
+                          _("Error subscribing"),
+                          error)
+                return
 
         (current_sla, unentitled_products, sla_data_map) = result
 
@@ -881,13 +875,14 @@ class SelectSLAScreen(Screen):
                         "Please use the \"All Available "
                         "Subscriptions\" tab to manually "
                         "attach subscriptions.") % current_sla
-                self.show_error_dialog(msg, parent=self._parent.parent_window)
-                #self._parent.attach_failure()
+                # TODO: add 'attach' state
+                self.emit('register-error', msg, None)
                 return
 
             self._parent.info.set_property('dry-run-result',
                                            sla_data_map.values()[0])
             self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
+            return
         elif len(sla_data_map) > 1:
             self.set_model(unentitled_products, sla_data_map)
             self.stay()
@@ -899,11 +894,8 @@ class SelectSLAScreen(Screen):
                     "subscribe using multiple service levels "
                     "via the \"All Available Subscriptions\" "
                     "tab or purchase additional subscriptions.")
-            self.show_error_dialog(msg, parent=self._parent.parent_window)
-            log.debug("gh, no suitable sla post hge %s", self._parent)
-
-            # FIXME: replace with register state drive error signal handler
-            #self._parent.attach_failure()
+            # TODO: add 'registering/attaching' state info
+            self.emit('register-error', msg, None)
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -941,9 +933,8 @@ class EnvironmentScreen(Screen):
     def _on_get_environment_list_cb(self, result_tuple, error=None):
         environments = result_tuple
         if error is not None:
-            self.handle_gui_exception(error, REGISTER_ERROR,
-                                 self._parent.parent_window)
-            self._parent.register_error()
+            # TODO: registering state
+            self.emit('register-error', REGISTER_ERROR, error)
             return
 
         if not environments:
@@ -955,12 +946,12 @@ class EnvironmentScreen(Screen):
         if len(envs) == 1:
             self.set_environement(envs[0][0])
             self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
+            return
+
         else:
             self.set_model(envs)
             self.stay()
-
-            # TESTTHIS
-            # self._parent.pre_done(DONT_CHANGE)
+            return
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -1022,9 +1013,12 @@ class OrganizationScreen(Screen):
             self._parent.info.set_property('owner-key', owner_key)
             # only one org, use it and skip the org selection screen
             self.emit('move-to-screen', ENVIRONMENT_SELECT_PAGE)
+            return
+
         else:
             self.set_model(owners)
             self.stay()
+            return
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -1074,8 +1068,13 @@ class CredentialsScreen(Screen):
 
     def _validate_consumername(self, consumername):
         if not consumername:
-            self.show_error_dialog(_("You must enter a system name."),
-                              self._parent.paren_window)
+            # TODO: register state to signal
+            self.emit('register-error',
+                      _("You must enter a system name."),
+                      None)
+
+            log.debug("NOTE: we should be staying on credentials screen here")
+
             self.consumer_name.grab_focus()
             return False
         return True
@@ -1083,14 +1082,22 @@ class CredentialsScreen(Screen):
     def _validate_account(self):
         # validate / check user name
         if self.account_login.get_text().strip() == "":
-            self.show_error_dialog(_("You must enter a login."),
-                              self._parent.parent_window)
+            self.emit('register-error',
+                      _("You must enter a login."),
+                      None)
+
+            log.debug("NOTE: stay on cred screen")
+
             self.account_login.grab_focus()
             return False
 
         if self.account_password.get_text().strip() == "":
-            self.show_error_dialog(_("You must enter a password."),
-                              self._parent.parent_window)
+            self.emit('register-error',
+                      _("You must enter a password."),
+                      None)
+
+            log.debug("NOTE: stay on cred screen")
+
             self.account_password.grab_focus()
             return False
         return True
@@ -1166,6 +1173,7 @@ class ActivationKeyScreen(Screen):
         self._parent.info.set_property('consumername', consumername)
         self._parent.info.set_property('owner-key', owner_key)
         self._parent.info.set_property('activation-keys', activation_keys)
+
         self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def _split_activation_keys(self, entry):
@@ -1174,24 +1182,36 @@ class ActivationKeyScreen(Screen):
 
     def _validate_owner_key(self, owner_key):
         if not owner_key:
-            self.show_error_dialog(_("You must enter an organization."),
-                              self._parent.parent_window)
+            self.emit('register-error',
+                      _("You must enter an organization."),
+                      None)
+
+            log.debug("NOTE: stay on act key page")
+
             self.organization_entry.grab_focus()
             return False
         return True
 
     def _validate_activation_keys(self, activation_keys):
         if not activation_keys:
-            self.show_error_dialog(_("You must enter an activation key."),
-                              self._parent.parent_window)
+            self.emit('register-error',
+                      _("You must enter an activation key."),
+                      None)
+
+            log.debug("NOTE: stay on act key page")
+
             self.activation_key_entry.grab_focus()
             return False
         return True
 
     def _validate_consumername(self, consumername):
         if not consumername:
-            self.show_error_dialog(_("You must enter a system name."),
-                              self._parent.parent_window)
+            self.emit('register-error',
+                      _("You must enter a system name."),
+                      None)
+
+            log.debug("NOTE: stay on act key page")
+
             self.consumer_entry.grab_focus()
             return False
         return True
@@ -1210,9 +1230,10 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
 
     def _on_refresh_cb(self, error=None):
         if error is not None:
-            self.handle_gui_exception(error, _("Error subscribing: %s"),
-                                 self._parent.parent_window)
-            self._parent.register_error()
+            self.emit('register-error',
+                      _("Error subscribing: %s"),
+                      error)
+            # TODO: register state
             return
 
         self._parent.finish_registration()
@@ -1275,21 +1296,25 @@ class ChooseServerScreen(Screen):
 
             try:
                 if not is_valid_server_info(hostname, port, prefix):
-                    self.show_error_dialog(_("Unable to reach the server at %s:%s%s") %
-                                      (hostname, port, prefix),
-                                      self._parent.parent_window)
-                    #self.emit('register-error-foo')
+                    self.emit('register-error',
+                              _("Unable to reach the server at %s:%s%s") %
+                                (hostname, port, prefix),
+                              None)
+                    self.stay()
                     return
             except MissingCaCertException:
-                self.show_error_dialog(_("CA certificate for subscription service has not been installed."),
-                                  self._parent.parent_window)
-                #self.emit('register-error-foo')
+                self.emit('register-error',
+                          _("CA certificate for subscription service has not been installed."),
+                          None)
+                self.stay()
                 return
 
         except ServerUrlParseError:
-            self.show_error_dialog(_("Please provide a hostname with optional port and/or prefix: hostname[:port][/prefix]"),
-                              self._parent.parent_window)
-            #self.emit('register-error-foo')
+            self.emit('register-error',
+                      _("Please provide a hostname with optional port and/or prefix: "
+                        "hostname[:port][/prefix]"),
+                      None)
+            self.stay()
             return
 
         log.debug("Writing server data to rhsm.conf")
@@ -1301,8 +1326,11 @@ class ChooseServerScreen(Screen):
 
         if self.activation_key_checkbox.get_active():
             self.emit('move-to-screen', ACTIVATION_KEY_PAGE)
+            return
+
         else:
             self.emit('move-to-screen', CREDENTIALS_PAGE)
+            return
 
     def clear(self):
         # Load the current server values from rhsm.conf:
@@ -1625,10 +1653,12 @@ class InfoScreen(Screen):
     def apply(self):
         if self.register_radio.get_active():
             log.debug("Proceeding with registration.")
-            return CHOOSE_SERVER_PAGE
+            self.emit('move-to-screen', CHOOSE_SERVER_PAGE)
+            return
+
         else:
             log.debug("Skipping registration.")
-            return FINISH
+            self.emit('move-to-screen', FINISH)
 
     def _on_why_register_button_clicked(self, button):
         self.why_register_dialog.show()
