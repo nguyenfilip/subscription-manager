@@ -86,12 +86,13 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self.cancel_button.connect('clicked', self.cancel)
 
         # initial-setup will likely
-        self.register_widget.connect('finished', self.finished)
-        self.register_widget.connect('register-error', self.on_register_error)
-        self.register_widget.connect('register-failure', self._on_register_failure)
-        self.register_widget.connect('attach-error', self.on_attach_error)
-        self.register_widget.connect('attach-failure', self._on_attach_failure)
-        self.register_widget.connect('register-error-foo', self._on_register_error_foo)
+        #self.register_widget.connect('finished', self.finished)
+        #self.register_widget.connect('register-error', self.on_register_error)
+        #self.register_widget.connect('register-failure', self._on_register_failure)
+        #self.register_widget.connect('attach-error', self.on_attach_error)
+        #self.register_widget.connect('attach-failure', self._on_attach_failure)
+        #self.register_widget.connect('register-error-foo', self._on_register_error_foo)
+        self.register_widget.connect('register-error', self._on_error)
 
         # update the 'next/register button on page change'
         self.register_widget.connect('notify::register-button-label',
@@ -103,6 +104,11 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
         self.register_box.show_all()
         self.register_widget.initialize()
+
+    def _on_error(self, widget, *args):
+        log.debug("-on_error widget=%s args=%s", widget, args)
+        print "RHSMSPoke._on_error"
+        self.set_error("%s" % args)
 
     # callback to attach to RegisterWidgets finished signal
     def finished(self, button):

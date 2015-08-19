@@ -41,7 +41,7 @@ from subscription_manager import managerlib
 from subscription_manager.utils import is_valid_server_info, MissingCaCertException, \
         parse_server_info, restart_virt_who
 
-from subscription_manager.gui.utils import format_exception
+from subscription_manager.gui.utils import format_exception, show_error_window
 from subscription_manager.gui.autobind import DryRunResult, \
         ServiceLevelNotSupportedException, AllProductsCoveredException, \
         NoProductsException
@@ -127,6 +127,19 @@ class RegistrationBox(widgets.SubmanBaseWidget):
     gui_file = "registration_box"
 
 
+# To eventually pass with the register-error signal
+class RegisterStateEnum(object):
+    BEFORE = 0
+    REGISTERING = 1
+    ATTACHING = 2
+    AFTER = 3
+
+
+class RegisterErrorTypeEnum(object):
+    ERROR = 0
+    FAILURE = 1
+
+
 class RegisterInfo(ga_GObject.GObject):
 
     username = ga_GObject.property(type=str, default='')
@@ -137,7 +150,7 @@ class RegisterInfo(ga_GObject.GObject):
     environment = ga_GObject.property(type=str, default='')
     skip_auto_bind = ga_GObject.property(type=bool, default=False)
     consumername = ga_GObject.property(type=str, default='')
-    owner_key = ga_GObject.property(type=str, default='')
+    owner_key = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
     activation_keys = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
 
     # split into AttachInfo or FindSlaInfo?
@@ -162,17 +175,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
                                 None, (int,)),
                     'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, []),
-                    'register-error-foo': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, (ga_GObject.TYPE_PYOBJECT,)),
+                                       None, (ga_GObject.TYPE_PYOBJECT,
+                                              ga_GObject.TYPE_PYOBJECT)),
                     'register-failure': (ga_GObject.SIGNAL_RUN_FIRST,
-                               None, []),
+                                         None, []),
                     'attach-error': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, []),
+                                     None, []),
                     'attach-failure': (ga_GObject.SIGNAL_RUN_FIRST,
-                               None, []),
-                    'finished': (ga_GObject.SIGNAL_RUN_FIRST,
-                                 None, [])}
+                                       None, []),
+                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                                          None, [])}
 
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
@@ -222,7 +234,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             screen = screen_class(parent=self)
             screen.connect('move-to-screen', self._on_move_to_screen)
             screen.connect('stay-on-screen', self._on_stay_on_screen)
-            screen.connect('register-error-foo', self._on_register_error_foo)
+            screen.connect('register-error', self._on_register_error)
+            screen.connect('register-finished', self._on_screen_register_finished)
             self._screens.append(screen)
             if screen.needs_gui:
                 screen.index = self.register_notebook.append_page(
@@ -272,16 +285,19 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self.backend.cp_provider.set_user_pass()
             self.backend.update()
 
-    def _on_register_error_foo(self, widget, msg):
-        log.debug("_on_register_error_foo widget=%s msg=%s", widget, msg)
-        self.emit('register-error-foo', msg)
+    def _on_register_error(self, widget, msg, exc_list):
+        log.debug("_on_register_error_foo widget=%s msg=%s exc_list=%s",
+                  widget, msg, exc_list)
+        self.emit('register-error', msg, exc_list)
+        return False
 
     def _on_stay_on_screen(self, current_screen):
         self._set_screen(self._current_screen)
 
     def show_error_dialog(self, msg, parent=None):
+        print "\n\n\n\nFIXME rw.show_error_dialog\n\n\n"
         log.debug("show_error_dialog msg=%S parent=%s", msg, parent)
-        self.emit('register-error-foo', msg)
+        self.emit('register-error-foo', msg, None)
 
     # TODO: replace most of the gui flow logic in the Screen subclasses with
     #       some state machine that drives them, possibly driving via signals
@@ -321,17 +337,26 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         result = self._screens[self._current_screen].apply()
         log.debug("current screen.apply result=%s", result)
 
+    # A 'register-finished' from a Screen subclass
+    def _on_screen_register_finished(self, obj):
+        self.finish_registration()
+
     def finish_registration(self):
         ga_GObject.source_remove(self.timer)
 
         self.done()
-        self.register_finished()
+        self.emit_register_finished()
+
+    def emit_register_finished(self):
+        self.emit('register-finished')
 
     def done(self):
         self.change_screen(DONE_PAGE)
 
     # TODO: now that this seems sorted, we could lump these back
     #       together in a single error handler
+
+    # TODO: replace with a class clousure do_register_error
     def register_error_screen(self):
         """Public method to go to the default registration error screen."""
         log.debug("register_error_screen")
@@ -342,28 +367,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # FIXME: maybe need a usually skipped "about to attach" screen?
         self._set_screen(SELECT_SLA_PAGE)
 
-    # Error raised by a notebook page/screen
-    def screen_error(self):
-        self.emit('error')
-
-    def register_finished(self):
-        self.emit('finished')
-
-    # when we decide we can not complete registration
-    def register_failure(self):
-        self.emit('register-failure')
-
     # when we hit a recoverable error during registration
-    def register_error(self):
-        self.emit('register-error')
-
-    # if we registered, but auto attach can not complete
-    def attach_failure(self):
-        self.emit('attach-failure')
-
-    # we've hit a recoverable error during auto-attach
-    def attach_error(self):
-        self.emit('attach-error')
+    def emit_register_error(self, msg, exc_info=None):
+        self.emit('register-error', msg, exc_info)
 
     def _on_details_label_txt_change(self, obj, value):
         self.details_label.set_label("<small>%s</small>" %
@@ -423,11 +429,8 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.cancel_button.connect('clicked', self.cancel)
 
         # initial-setup will likely
-        self.register_widget.connect('finished', self.cancel)
+        self.register_widget.connect('register-finished', self.cancel)
         self.register_widget.connect('register-error', self.on_register_error)
-        self.register_widget.connect('register-failure', self.on_register_failure)
-        self.register_widget.connect('attach-error', self.on_attach_error)
-        self.register_widget.connect('attach-failure', self.on_attach_failure)
 
         # update window title on register state changes
         self.register_widget.connect('notify::register-state',
@@ -459,23 +462,30 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.register_dialog.hide()
         return True
 
-    def on_register_error(self, args):
-        log.debug("register_dialog.on_register_error args=%s", args)
-        # FIXME: can we just ignore this for sm-gui?
+    def on_register_error(self, obj, msg, exc_list):
+        log.debug("register_dialog.on_register_error obj=%s msg=%s exc_list=%s",
+                  obj, msg, exc_list)
+
+        # TODO: we can add the register state, error type (error or exc)
+        if exc_list:
+            self.handle_register_exception(obj, msg, exc_list)
+        else:
+            self.handle_register_error(obj, msg)
+        return True
+
+    def handle_register_error(self, obj, msg):
+        self.error_dialog(obj, msg)
+
+        # FIXME: let RegisterWidget use its class closure do_register_error
+        # to do this
         self.register_widget.register_error_screen()
 
-    def on_register_failure(self, args):
-        log.debug("register_dialog.on_register_failure args=%s", args)
-        self.register_dialog.hide()
+    def handle_register_exception(self, obj, msg, exc_info):
+        message = format_exception(exc_info, msg)
+        self.error_dialog(obj, message)
 
-    def on_attach_error(self, args):
-        log.debug("register_dialog.on_attach_error args=%s", args)
-        # FIXME: can we just ignore this for sm-gui?
-        self.register_widget.attach_error_screen()
-
-    def on_attach_failure(self, args):
-        log.debug("register_dialog.on_attach_failure args=%s", args)
-        self.register_dialog.hide()
+    def error_dialog(self, obj, msg):
+        show_error_window(msg)
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
@@ -526,8 +536,11 @@ class Screen(widgets.SubmanBaseWidget):
     # TODO: replace page int with class enum
     __gsignals__ = {'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
                                  None, []),
-                    'register-error-foo': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, (ga_GObject.TYPE_PYOBJECT,)),
+                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                                 None, []),
+                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, (ga_GObject.TYPE_PYOBJECT,
+                                     ga_GObject.TYPE_PYOBJECT)),
                     'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
                                      None, (int,))}
 
@@ -545,12 +558,11 @@ class Screen(widgets.SubmanBaseWidget):
     # FIXME: rename to signaly
     def show_error_dialog(self, msg, parent=None):
         log.debug("show_error_dialog msg=%s parent=%s", msg, parent)
-        self.emit('register-error-foo', msg)
+        self.emit('register-error', msg, None)
 
     def handle_gui_exception(self, error, msg, parent=None):
         log.debug("handle_gui_exception error=%s msg=%s parent=%s", error, msg, parent)
-        message = format_exception(error, msg)
-        self.emit('register-error-foo', message)
+        self.emit('register-error', msg, error)
 
     def stay(self):
         self.emit('stay-on-screen')
@@ -577,8 +589,11 @@ class NoGuiScreen(ga_GObject.GObject):
                                        None, (int,)),
                     'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
                                        None, []),
-                    'register-error-foo': (ga_GObject.SIGNAL_RUN_FIRST,
-                              None, (ga_GObject.TYPE_PYOBJECT,)),
+                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                                 None, []),
+                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                              None, (ga_GObject.TYPE_PYOBJECT,
+                                     ga_GObject.TYPE_PYOBJECT)),
                     'certs-updated': (ga_GObject.SIGNAL_RUN_FIRST,
                                       None, [])}
 
@@ -594,11 +609,11 @@ class NoGuiScreen(ga_GObject.GObject):
     # FIXME: rename to signaly
     def show_error_dialog(self, msg, parent=None):
         log.debug("show_error_dialog msg=%s parent=%s", msg, parent)
-        self.emit('register-error-foo', msg)
+        self.emit('register-error', msg, None)
 
     def handle_gui_exception(self, error, msg, parent=None):
         log.debug("handle_gui_exception msg=%s parent=%s", error, msg, parent)
-        self.emit('register-error-foo', msg)
+        self.emit('register-error', msg, error)
 
     def pre(self):
         return True
@@ -672,13 +687,12 @@ class PerformSubscribeScreen(NoGuiScreen):
     def _on_subscribing_finished_cb(self, unused, error=None):
         log.debug("_on_subscribing_finished_cb error=%s", error)
         if error is not None:
-            self.handle_gui_exception(error, _("Error subscribing: %s"),
-                                 self._parent.parent_window)
-            self._parent.attach_error()
+            message = _("Error subscribing: %s")
+            self.emit('register-error', message, error)
             return
 
         self.emit('certs-updated')
-        self._parent.finish_registration()
+        self.emit('register-finished')
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -827,26 +841,28 @@ class SelectSLAScreen(Screen):
             if isinstance(error[1], ServiceLevelNotSupportedException):
                 OkDialog(_("Unable to auto-attach, server does not support service levels."),
                         parent=self._parent.parent_window)
-                # FIXME: is this a failure or a finish?
+                # HMM: if we make the ok a register-error as well, we may get
+                # wacky ordering if the register-error is followed immed by a
+                # register-finished?
+                self.emit('register-finished')
             elif isinstance(error[1], NoProductsException):
                 InfoDialog(_("No installed products on system. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
                 # we are finished, close the register window
-                self._parent.register_finished()
+                self.emit('register-finished')
             elif isinstance(error[1], AllProductsCoveredException):
                 InfoDialog(_("All installed products are covered by valid entitlements. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
                 # We are finished, close the register window
-                self._parent.register_finished()
+                self.emit('register-finished')
             elif isinstance(error[1], GoneException):
                 InfoDialog(_("Consumer has been deleted."),
                            parent=self._parent.parent_window)
+                # TODO: where we should go from here?
             else:
                 log.exception(error)
-                self.handle_gui_exception(error, _("Error subscribing"),
-                                     self._parent.parent_window)
-            # Assume this is a recoverable error
-            self._parent.attach_error()
+                self.emit('register-error', _("Error subscribing"), error)
+
             return
 
         (current_sla, unentitled_products, sla_data_map) = result
@@ -866,7 +882,7 @@ class SelectSLAScreen(Screen):
                         "Subscriptions\" tab to manually "
                         "attach subscriptions.") % current_sla
                 self.show_error_dialog(msg, parent=self._parent.parent_window)
-                self._parent.attach_failure()
+                #self._parent.attach_failure()
                 return
 
             self._parent.info.set_property('dry-run-result',
@@ -885,7 +901,9 @@ class SelectSLAScreen(Screen):
                     "tab or purchase additional subscriptions.")
             self.show_error_dialog(msg, parent=self._parent.parent_window)
             log.debug("gh, no suitable sla post hge %s", self._parent)
-            self._parent.attach_failure()
+
+            # FIXME: replace with register state drive error signal handler
+            #self._parent.attach_failure()
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -986,9 +1004,7 @@ class OrganizationScreen(Screen):
 
     def _on_get_owner_list_cb(self, owners, error=None):
         if error is not None:
-            self.handle_gui_exception(error, REGISTER_ERROR,
-                    self._parent.parent_window)
-            self._parent.register_error()
+            self.emit('register-error', REGISTER_ERROR, error)
             return
 
         owners = [(owner['key'], owner['displayName']) for owner in owners]
@@ -998,8 +1014,7 @@ class OrganizationScreen(Screen):
         if len(owners) == 0:
             msg = _("<b>User %s is not able to register with any orgs.</b>") % \
                     self._parent.info.get_property('username')
-            self.show_error_dialog(msg, self._parent.window_window)
-            self._parent.register_error()
+            self.emit('register-error', msg, None)
             return
 
         if len(owners) == 1:
@@ -1394,6 +1409,8 @@ class AsyncBackend(object):
         try:
             if not current_sla:
                 log.debug("Saving selected service level for this system.")
+
+                # FIXME: why is dry_ryn_result None here?
                 self.backend.cp_provider.get_consumer_auth_cp().updateConsumer(uuid,
                         service_level=dry_run_result.service_level)
 
