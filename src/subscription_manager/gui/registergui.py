@@ -199,7 +199,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     register_button_label = ga_GObject.property(type=str, default=_('Register'))
     # TODO: a prop equilivent to initial-setups 'completed' and 'status' props
 
-    def __init__(self, backend, facts, parent=None):
+    def __init__(self, backend, facts, parent_window=None):
         super(RegisterWidget, self).__init__()
 
         log.debug("RegisterWidget")
@@ -211,7 +211,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # widget
         self.async = AsyncBackend(self.backend)
 
-        self.parent_window = parent
+        self.parent_window = parent_window
 
         self.info = RegisterInfo()
 
@@ -443,7 +443,8 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
         # FIXME: Need better error handling in general, but it's kind of
         # annoying to have to pass the top level widget all over the place
-        self.register_widget = RegisterWidget(backend, facts, parent=self.register_dialog)
+        self.register_widget = RegisterWidget(backend, facts,
+                                              parent_window=self.register_dialog)
         # Ensure that we start on the first page and that
         # all widgets are cleared.
         self.register_widget.initialize()
@@ -456,8 +457,8 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
         # initial-setup will likely
         self.register_widget.connect('finished', self.cancel)
-        self.register_widget.connect('register-finished', self.cancel)
-        self.register_widget.connect('attach-finished', self.cancel)
+        #self.register_widget.connect('register-finished', self._on_register_finished)
+        #self.register_widget.connect('attach-finished', self.cancel)
         self.register_widget.connect('register-error', self.on_register_error)
 
         # update window title on register state changes
@@ -665,6 +666,9 @@ class PerformRegisterScreen(NoGuiScreen):
             #self._parent.register_error()
             return
 
+        # Done with the registration stuff, now on to attach
+        self.emit('register-finished')
+
         try:
             managerlib.persist_consumer_cert(new_account)
 
@@ -675,7 +679,6 @@ class PerformRegisterScreen(NoGuiScreen):
                 self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
                 return
             elif self._parent.info.get_property('skip-auto-bind'):
-                self.emit('register-finished')
                 return
             else:
                 self.emit('move-to-screen', SELECT_SLA_PAGE)
@@ -830,7 +833,7 @@ class SelectSLAScreen(Screen):
             self.sla_radio_container.remove(child)
 
     def _radio_clicked(self, button, data):
-        log.debug("_on_radio_clicked button=%s data=%s",
+        log.debug("_radio_clicked button=%s data=%s",
                   button, data)
         sla, sla_data_map = data
         log.debug("sla=%s sla_data_map=%s", sla, sla_data_map)
@@ -866,17 +869,17 @@ class SelectSLAScreen(Screen):
                 # HMM: if we make the ok a register-error as well, we may get
                 # wacky ordering if the register-error is followed immed by a
                 # register-finished?
-                self.emit('register-finished')
+                self.emit('attach-finished')
                 return
             elif isinstance(error[1], NoProductsException):
                 InfoDialog(_("No installed products on system. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
-                self.emit('register-finished')
+                self.emit('attach-finished')
                 return
             elif isinstance(error[1], AllProductsCoveredException):
                 InfoDialog(_("All installed products are covered by valid entitlements. No need to attach subscriptions at this time."),
                            parent=self._parent.parent_window)
-                self.emit('register-finished')
+                self.emit('attach-finished')
                 return
             elif isinstance(error[1], GoneException):
                 # FIXME: shoudl we log here about deleted consumer or
@@ -912,6 +915,7 @@ class SelectSLAScreen(Screen):
                         "attach subscriptions.") % current_sla
                 # TODO: add 'attach' state
                 self.emit('register-error', msg, None)
+                self.emit('attach-finished')
                 return
 
             self._parent.info.set_property('dry-run-result',
@@ -931,6 +935,7 @@ class SelectSLAScreen(Screen):
                     "tab or purchase additional subscriptions.")
             # TODO: add 'registering/attaching' state info
             self.emit('register-error', msg, None)
+            self.emit('attach-finished')
 
     def pre(self):
         self._parent.set_property('details-label-txt', self.pre_message)
@@ -1427,14 +1432,16 @@ class AsyncBackend(object):
             installed_mgr = require(INSTALLED_PRODUCTS_MANAGER)
 
             self.plugin_manager.run("pre_register_consumer", name=name,
-                facts=facts.get_facts())
+                                    facts=facts.get_facts())
+
             cp = self.backend.cp_provider.get_basic_auth_cp()
             retval = cp.registerConsumer(name=name, facts=facts.get_facts(),
                                          owner=owner, environment=env,
                                          keys=activation_keys,
                                           installed_products=installed_mgr.format_for_server())
+
             self.plugin_manager.run("post_register_consumer", consumer=retval,
-                facts=facts.get_facts())
+                                    facts=facts.get_facts())
 
             require(IDENTITY).reload()
             # Facts and installed products went out with the registration
