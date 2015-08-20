@@ -124,23 +124,6 @@ def reset_resolver():
         pass
 
 
-class RegistrationBox(widgets.SubmanBaseWidget):
-    gui_file = "registration_box"
-
-
-# To eventually pass with the register-error signal
-class RegisterStateEnum(object):
-    BEFORE = 0
-    REGISTERING = 1
-    ATTACHING = 2
-    AFTER = 3
-
-
-class RegisterErrorTypeEnum(object):
-    ERROR = 0
-    FAILURE = 1
-
-
 class RegisterInfo(ga_GObject.GObject):
 
     username = ga_GObject.property(type=str, default='')
@@ -210,32 +193,44 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.identity = require(IDENTITY)
         self.facts = facts
 
-        # widget
         self.async = AsyncBackend(self.backend)
 
+        # TODO: should be able to get rid of this soon
         self.parent_window = parent_window
 
         self.info = RegisterInfo()
 
-        self.info.connect("notify::username", self._on_username_password_change)
-        self.info.connect("notify::password", self._on_username_password_change)
-        self.info.connect("notify::hostname", self._on_connection_info_change)
-        self.info.connect("notify::port", self._on_connection_info_change)
-        self.info.connect("notify::prefix", self._on_connection_info_change)
-        self.info.connect("notify::activation-keys", self._on_activation_keys_change)
+        # TODO: move these handlers into their own class
+        self.info.connect("notify::username",
+                          self._on_username_password_change)
+        self.info.connect("notify::password",
+                          self._on_username_password_change)
+        self.info.connect("notify::hostname",
+                          self._on_connection_info_change)
+        self.info.connect("notify::port",
+                          self._on_connection_info_change)
+        self.info.connect("notify::prefix",
+                          self._on_connection_info_change)
+        self.info.connect("notify::activation-keys",
+                          self._on_activation_keys_change)
 
         # expect this to be driving from the parent dialog
-        self.connect('proceed', self._on_proceed)
+        self.connect('proceed',
+                     self._on_proceed)
 
         # FIXME: change glade name
         self.details_label = self.register_details_label
-        self.connect('notify::details-label-txt', self._on_details_label_txt_change)
-        self.connect('notify::register-state', self._on_register_state_change)
 
-        # To update the 'next/register' button based on the new page
-        self.register_notebook.connect('switch-page', self._on_switch_page)
+        # update widgets if the values change
+        self.connect('notify::details-label-txt',
+                     self._on_details_label_txt_change)
+        self.connect('notify::register-state',
+                     self._on_register_state_change)
 
-        #widget
+        # To update the 'next/register' button in the parent dialog based on the new page
+        self.register_notebook.connect('switch-page',
+                                       self._on_switch_page)
+
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
                           EnvironmentScreen, PerformRegisterScreen,
@@ -244,41 +239,36 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                           InfoScreen, DoneScreen]
         self._screens = []
 
-        #import collections
-        map = {}
-        #map = collections.defaultdict(list)
-
         for idx, screen_class in enumerate(screen_classes):
             screen = screen_class(parent=self)
+
+            # connect handlers to various screen signals. The screens are
+            # Gobjects not gtk widgets, so they can't propagate normally.
             screen.connect('move-to-screen', self._on_move_to_screen)
             screen.connect('stay-on-screen', self._on_stay_on_screen)
             screen.connect('register-error', self._on_screen_register_error)
-            screen.connect('register-finished', self._on_screen_register_finished)
-            screen.connect('attach-finished', self._on_screen_attach_finished)
+            screen.connect('register-finished',
+                           self._on_screen_register_finished)
+            screen.connect('attach-finished',
+                           self._on_screen_attach_finished)
+
+            # add the index of the screen in self._screens to the class itself
             screen.screens_index = idx
+
             self._screens.append(screen)
 
-            res = {'screen': screen,
-                   'screen_class': screen_class,
-                   'widget': None,
-                   'index_nb': None,
-                   'index_screens': idx,
-                   'needs_gui': False}
+            # Some screens have no gui controls, they just use the
+            # PROGRESS_PAGE, so the indexes to the register_notebook's pages and
+            # to self._screen differ
             if screen.needs_gui:
-                res['needs_gui'] = True
+                # screen.index is the screens index in self.register_notebook
                 screen.index = self.register_notebook.append_page(
                         screen.container, tab_label=None)
-                res['index_nb'] = screen.index
-                res['widget'] = screen.container
-            map[idx] = res
-
-        pprint.pprint(map)
 
         self._current_screen = None
-        self.screen_history = []
 
-        self._move_from = []
-        self._switched_to_pages = []
+        # Track screens we "show" so we can choose a reasonable error screen
+        self.screen_history = []
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -301,7 +291,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def _on_switch_page(self, notebook, page, page_num):
         current_screen = self._screens[self._current_screen]
         # NonGuiScreens have a None button label
-        self._switched_to_pages.append(page_num)
         if current_screen.button_label:
             self.set_property('register-button-label', current_screen.button_label)
 
@@ -325,38 +314,37 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             self.backend.cp_provider.set_user_pass()
             self.backend.update()
 
-    # This should always get run first, then
+    # This should always get run first, when this widget emits a
+    # 'register-error', then it's emitted to other handlers (namely,
+    # any parent dialogs handlers it has set up
     def do_register_error(self, msg, exc_info):
         log.debug("RW.do_register_error msg=%s exc_info=%s",
                    msg, exc_info)
+        log.debug("do_register_error: screen_history=%s", self.screen_history)
+        log.debug("Moving back to %s", self.screen_history[-1])
 
-        print "move_from (notebook idx):"
-        pprint.pprint(self._move_from)
-        print
-        print "switched_to (notebook idx page we went to)"
-        pprint.pprint(self._switched_to_pages)
-        pprint.pprint(self.screen_history)
-        print
-        log.debug("do_r_e: move_to history = %s", pprint.pformat(self._move_from))
-        log.debug("do_r_e: notebook_page_history = %s", pprint.pformat(self._switched_to_pages))
-
-        print "Moving back to ", self.screen_history[-1]
-        print "lsh: %s" % (self.screen_history)
-        # FIXME: for autowizard
+        # return to the last gui screen we showed
         self._set_screen(self.screen_history[-1])
 
+    # Handler 'register-error' signals emitted from the Screens, then
+    # emit one or selfs.
     def _on_screen_register_error(self, obj, msg, exc_info):
         log.debug("_on_screen_register_error obj=%s msg=%s exc_info=%s",
                   obj, msg, exc_info)
-        print "on_s_r_e nm page: ", self.register_notebook.get_property('page')
+
         # Now emit a new signal for parent widget and self.do_register_error()
         # to handle
         self.emit('register-error', msg, exc_info)
+
+        # do_register_error handles it for this widget, so stop emission
         return False
 
+    # If a Screen emits a 'stay-on-screen' widget, it means that the widget
+    # has been shown, and error handling should not move to a different screen.
+    # This also represents screens that allow the user to potentially correct
+    # an error, so we track the history of these screens so errors can go to
+    # a useful screen, and potentially eventually support 'back' again.
     def _on_stay_on_screen(self, current_screen):
-        print "STAYING ON SCREEN: cur", current_screen, "idx: ", \
-            current_screen.screens_index, "_cur:", self._current_screen
         self.screen_history.append(current_screen.screens_index)
         self._set_screen(self._current_screen)
 
@@ -364,23 +352,19 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     #       some state machine that drives them, possibly driving via signals
     #       indicating each state
 
+    # handle the 'move-to-screen' signal, indicating a Screen needs to send the
+    # user someone aside from the 'next' screen. For example, to skip SLA
+    # selection if there is only one SLA.
     def _on_move_to_screen(self, current_screen, next_screen_id):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
                   current_screen, next_screen_id)
-
-        # TODO: we know the Screen object that called this, the id of
-        #       the screen we want to go to, and we can ask register_notebook
-        #       for it's current page. Let's track those so we can go 'back'
-
-        # transition from a progress page to a 'gui' page will be tracked
-        # so we can know which gui screens, not including progress, were before
-        # the current screen
-        origin_notebook_page = self.register_notebook.get_property('page')
-        log.debug("CURRENT ORIGIN NOTEBOOK PAGE: %s", origin_notebook_page)
-
-        self._move_from.append(origin_notebook_page)
         self.change_screen(next_screen_id)
 
+    # Move to the next screen, by starting with calling the next screens .pre().
+    # If it indicates it is async and is spinning off a thread and we should
+    # wait for a callback, then move the screen to the PROGRESS_PAGE. The
+    # callback is then responsible for sending the user to the right screen
+    # via 'move-to-screen' signal.
     def change_screen(self, next_screen_id):
         next_screen = self._screens[next_screen_id]
 
@@ -390,11 +374,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         if async:
             next_screen.emit('move-to-screen', PROGRESS_PAGE)
 
+    # handle both updating _current_screen, the index of our logical Screens,
+    # as well as sending the register_notebook to the correct page in the
+    # notebook widget.
     def _set_screen(self, screen):
-        log.debug("registerWidget._set_screen _current_screen=%s screen=%s", self._current_screen, screen)
-        next_notebook_page = screen
+        log.debug("registerWidget._set_screen _current_screen=%s screen=%s",
+                  self._current_screen, screen)
 
-        current_notebook_page = self.register_notebook.get_property('page')
+        next_notebook_page = screen
 
         if screen > PROGRESS_PAGE:
             self._current_screen = screen
@@ -406,49 +393,72 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             # TODO: replace with a generator
             next_notebook_page = screen + 1
 
-        log.debug("Moving from notebook page: %s to page: %s",
-                  current_notebook_page, next_notebook_page)
-
+        # set_current_page changes the gui, and also results in the
+        # 'switch-page' attribute of the gtk notebook being emitted,
+        # indicating the gui has switched to that page.
         self.register_notebook.set_current_page(next_notebook_page)
-
-        log.debug("move_to history = %s", pprint.pformat(self._move_from))
-        log.debug("switched_to_history = %s", pprint.pformat(self._switched_to_pages))
 
     # FIXME: figure out to determine we are on first screen, then this
     # could just be 'move-to-screen', next screen
     # Go to the next screen/state
     def _on_proceed(self, obj):
         log.debug("registerWidget._on_proceed obj=%s", obj)
+        self.apply_current_screen()
+
+    # extract any info from the widgets and call the screens apply
+    def apply_current_screen(self):
         result = self._screens[self._current_screen].apply()
         log.debug("current screen.apply result=%s", result)
 
-    # A 'register-finished' from a Screen subclass
+    # A 'register-finished' signal emitted from one of our Screens, indicating
+    # that we are finished with registration (either completly, or because it's
+    # not needed, etc). RegisterWidget then emits it's own 'register-finished'
+    # for any parent dialogs to handle. Note: 'register-finished' only means the
+    # registration steps are finished, and not neccasarily that the gui should
+    # be close. It may need to auto attach, etc. 'finished' means the dialog
+    # can be closed.
     def _on_screen_register_finished(self, obj):
         self.emit('register-finished')
 
-        # We are done if there is no auto-bind
+        # We are done if there is auto bind is being skipped ("Manually attach
+        # to subscriptions" is clicked in the gui)
         if self.info.get_property('skip-auto-bind'):
             self.emit('finished')
 
+    # One of our Screens has indicated that subscription attachment is done.
+    # Note: This doesn't neccasarily indicate success, just that the gui has
+    # done all the attaching it can. RegisterWidget emits it's own
+    # 'attach-finished' for parent widgets to handle. Again, note that
+    # attach-finished is not the same as 'finished', even though at the moment,
+    # 'finished' does immediately follow 'attach-finished'
     def _on_screen_attach_finished(self, obj):
         self.emit('attach-finished')
+
         # If attach is finished, we are done.
-        # let self.do_finished() handle turning off the lights, but
-        # leave closing the window to the parent dialog.
+        # let RegisterWidget's self.do_finished() handle any self specific
+        # shutdown (like detaching self.timer) first.
         self.emit('finished')
 
+    # class closure signal handler for the 'finished' signal. Ran first before
+    # the any other signal handlers attach to 'finished'
     def do_finished(self):
-        log.debug("do_finished FINISH")
         ga_GObject.source_remove(self.timer)
+
+        # Switch to the 'done' screen before telling other signal handlers we
+        # are done. This way, parent widgets like initial-setup that don't just
+        # close the window have something to display.
         self.done()
 
     def done(self):
         self.change_screen(DONE_PAGE)
 
+    # update the label under the progress bar on progress pages
     def _on_details_label_txt_change(self, obj, value):
         self.details_label.set_label("<small>%s</small>" %
                                      self.get_property('details-label-txt'))
 
+    # When we switch from registering to attaching, (the 'register-state'
+    # property changed), soupdate the related label on progress page.
     def _on_register_state_change(self, obj, value):
         state = self.get_property('register-state')
         if state == REGISTERING:
@@ -642,6 +652,8 @@ class Screen(widgets.SubmanBaseWidget):
     def pre(self):
         return False
 
+    # do whatever the screen indicates, and emit any signals indicating where
+    # to move to next. apply() should not return anything.
     def apply(self):
         pass
 
@@ -951,21 +963,8 @@ class SelectSLAScreen(Screen):
 
         (current_sla, unentitled_products, sla_data_map) = result
 
-        log.debug("result=%s", result)
-        log.debug("current_sla=%s, unentitled_products=%s, sla_data_map=%s",
-                  current_sla, unentitled_products, sla_data_map)
         self._parent.info.set_property('current-sla', current_sla)
-        log.debug("current_sla=%s, unentitled_products=%s, sla_data_map=%s",
-                  current_sla, unentitled_products, sla_data_map)
 
-        try:
-            log.debug("current_sla=%s", current_sla)
-            log.debug("unentitled_products=%s", unentitled_products)
-            log.debug("sla_data_map=%s len=%s", sla_data_map, len(sla_data_map))
-            log.debug("sla_data_map %s", pprint.pformat(sla_data_map))
-        except Exception, e:
-            self.emit('register-error', 'logging dumb', e)
-            return
 
         if len(sla_data_map) == 1:
             # If system already had a service level, we can hit this point
