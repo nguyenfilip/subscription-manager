@@ -161,15 +161,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
                                 None, []),
+                    'register-warning': (ga_GObject.SIGNAL_RUN_FIRST,
+                                         None, (ga_GObject.TYPE_PYOBJECT,)),
                     'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
                                        None, (ga_GObject.TYPE_PYOBJECT,
                                               ga_GObject.TYPE_PYOBJECT)),
-                    'register-failure': (ga_GObject.SIGNAL_RUN_FIRST,
-                                         None, []),
-                    'attach-error': (ga_GObject.SIGNAL_RUN_FIRST,
-                                     None, []),
-                    'attach-failure': (ga_GObject.SIGNAL_RUN_FIRST,
-                                       None, []),
                     'finished': (ga_GObject.SIGNAL_RUN_FIRST,
                                  None, []),
                     'attach-finished': (ga_GObject.SIGNAL_RUN_FIRST,
@@ -400,7 +396,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     # extract any info from the widgets and call the screens apply
     def apply_current_screen(self):
-        result = self._screens[self._current_screen].apply()
+        self._screens[self._current_screen].apply()
 
     # A 'register-finished' signal emitted from one of our Screens, indicating
     # that we are finished with registration (either completly, or because it's
@@ -591,10 +587,12 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 class AutobindWizard(RegisterDialog):
     __gtype_name__ = "AutobindWizard"
 
+    initial_screen = SELECT_SLA_PAGE
+
     def __init__(self, backend, facts, parent):
         super(AutobindWizard, self).__init__(backend, facts, parent)
-        self.register_widget.initial_screen = SELECT_SLA_PAGE
-        self.register_widget.screen_history.append(SELECT_SLA_PAGE)
+        #self.register_widget.initial_screen = SELECT_SLA_PAGE
+        #self.register_widget.screen_history.append(SELECT_SLA_PAGE)
 
     def show(self):
         super(AutobindWizard, self).show()
