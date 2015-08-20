@@ -187,6 +187,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         #widget
         self.backend = backend
         self.identity = require(IDENTITY)
+
         self.facts = facts
 
         self.async = AsyncBackend(self.backend)
@@ -491,6 +492,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         # annoying to have to pass the top level widget all over the place
         self.register_widget = RegisterWidget(backend, facts,
                                               parent_window=self.register_dialog)
+
         # Ensure that we start on the first page and that
         # all widgets are cleared.
         self.register_widget.initialize()
@@ -503,8 +505,6 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
         # initial-setup will likely
         self.register_widget.connect('finished', self.cancel)
-        #self.register_widget.connect('register-finished', self._on_register_finished)
-        #self.register_widget.connect('attach-finished', self.cancel)
         self.register_widget.connect('register-error', self.on_register_error)
 
         # update window title on register state changes
@@ -523,15 +523,12 @@ class RegisterDialog(widgets.SubmanBaseWidget):
     def initialize(self):
         self.register_widget.clear_screens()
         self.register_widget.initialize()
-        log.debug("RegisterScreen.initialize")
 
     def show(self):
         # initial-setup module skips this, since it results in a
         # new top level window that isn't reparented to the initial-setup
         # screen.
-
         self.register_dialog.show()
-        log.debug("RegsiterScreen.show")
 
     def cancel(self, button):
         self.register_dialog.hide()
@@ -561,9 +558,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         show_error_window(msg)
 
     def _on_register_button_clicked(self, button):
-        log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
         self.register_widget.emit('proceed')
-        log.debug("post")
 
     def _on_register_state_change(self, obj, value):
         state = obj.get_property('register-state')
@@ -573,29 +568,23 @@ class RegisterDialog(widgets.SubmanBaseWidget):
             self.register_dialog.set_title(_("Subscription Attachment"))
 
     def _on_register_button_label_change(self, obj, value):
-        log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
         register_label = obj.get_property('register-button-label')
-        log.debug('register_label=%s', register_label)
-        log.debug('self.register_button %s', self.register_button)
-
         # FIXME: button_label can be None for NonGuiScreens. Seems like
         #
         if register_label:
             self.register_button.set_label(register_label)
 
 
-class AutobindWizard(RegisterDialog):
+class AutobindWizardDialog(RegisterDialog):
     __gtype_name__ = "AutobindWizard"
 
     initial_screen = SELECT_SLA_PAGE
 
-    def __init__(self, backend, facts, parent):
-        super(AutobindWizard, self).__init__(backend, facts, parent)
-        #self.register_widget.initial_screen = SELECT_SLA_PAGE
-        #self.register_widget.screen_history.append(SELECT_SLA_PAGE)
+    def __init__(self, backend, facts):
+        super(AutobindWizardDialog, self).__init__(backend, facts)
 
     def show(self):
-        super(AutobindWizard, self).show()
+        super(AutobindWizardDialog, self).show()
         self.register_widget.change_screen(SELECT_SLA_PAGE)
 
 

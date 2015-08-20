@@ -359,8 +359,6 @@ class MainWindow(widgets.SubmanBaseWidget):
             self.redeem_menu_item.set_sensitive(False)
 
     def _register_item_clicked(self, widget):
-        self.log.debug("_register_item_clicked widget=%s", widget)
-        self.log.debug("self.registration_dialog=%s", self.registration_dialog)
         self.registration_dialog.initialize()
         self.registration_dialog.show()
 
@@ -427,9 +425,8 @@ class MainWindow(widgets.SubmanBaseWidget):
         self.import_sub_dialog.show()
 
     def _update_certificates_button_clicked(self, widget):
-        autobind_wizard = registergui.AutobindWizard(self.backend,
-                                                     self.facts,
-                                                     self._get_window())
+        autobind_wizard = registergui.AutobindWizardDialog(self.backend,
+                                                           self.facts)
         autobind_wizard.initialize()
         autobind_wizard.show()
 

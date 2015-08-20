@@ -69,10 +69,12 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         init_dep_injection()
 
         facts = inj.require(inj.FACTS)
+
         backend = managergui.Backend()
 
         self.register_widget = registergui.RegisterWidget(backend, facts,
                                                           parent_window=self.main_window)
+
         self.register_box = self.builder.get_object("register_box")
         self.button_box = self.builder.get_object('navigation_button_box')
         self.proceed_button = self.builder.get_object('proceed_button')
