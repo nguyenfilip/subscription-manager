@@ -194,6 +194,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                     'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
                                           None, [])}
 
+    initial_screen = CHOOSE_SERVER_PAGE
+
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
     register_button_label = ga_GObject.property(type=str, default=_('Register'))
@@ -242,31 +244,41 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                           InfoScreen, DoneScreen]
         self._screens = []
 
-        for screen_class in screen_classes:
+        #import collections
+        map = {}
+        #map = collections.defaultdict(list)
+
+        for idx, screen_class in enumerate(screen_classes):
             screen = screen_class(parent=self)
             screen.connect('move-to-screen', self._on_move_to_screen)
             screen.connect('stay-on-screen', self._on_stay_on_screen)
             screen.connect('register-error', self._on_screen_register_error)
             screen.connect('register-finished', self._on_screen_register_finished)
             screen.connect('attach-finished', self._on_screen_attach_finished)
+            screen.screens_index = idx
             self._screens.append(screen)
+
+            res = {'screen': screen,
+                   'screen_class': screen_class,
+                   'widget': None,
+                   'index_nb': None,
+                   'index_screens': idx,
+                   'needs_gui': False}
             if screen.needs_gui:
+                res['needs_gui'] = True
                 screen.index = self.register_notebook.append_page(
                         screen.container, tab_label=None)
+                res['index_nb'] = screen.index
+                res['widget'] = screen.container
+            map[idx] = res
 
-        self.initial_screen = CHOOSE_SERVER_PAGE
-        # TODO: current_screen as property?
-        self._current_screen = self.initial_screen
-        self._previous_screen = self.initial_screen
+        pprint.pprint(map)
 
-        # history of screen transitions including NoGuiScreen
-        self._screen_transitions = []
-        # history of notebook page transitions
-        self._notebook_transitions = []
+        self._current_screen = None
+        self.screen_history = []
 
-        # the list of gui notebook pages we encountered, mostly
-        # for the previous non-progess, not NonGuiScreen
-        self._gui_pages = []
+        self._move_from = []
+        self._switched_to_pages = []
 
         # FIXME: modify property instead
         self.callbacks = []
@@ -282,11 +294,14 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def set_initial_screen(self):
         self._set_screen(self.initial_screen)
+        self._current_screen = self.initial_screen
+        self.screen_history = [self.initial_screen]
 
     # switch-page should be after the current screen is reset
     def _on_switch_page(self, notebook, page, page_num):
         current_screen = self._screens[self._current_screen]
         # NonGuiScreens have a None button label
+        self._switched_to_pages.append(page_num)
         if current_screen.button_label:
             self.set_property('register-button-label', current_screen.button_label)
 
@@ -314,17 +329,35 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def do_register_error(self, msg, exc_info):
         log.debug("RW.do_register_error msg=%s exc_info=%s",
                    msg, exc_info)
-        self._set_screen(CHOOSE_SERVER_PAGE)
+
+        print "move_from (notebook idx):"
+        pprint.pprint(self._move_from)
+        print
+        print "switched_to (notebook idx page we went to)"
+        pprint.pprint(self._switched_to_pages)
+        pprint.pprint(self.screen_history)
+        print
+        log.debug("do_r_e: move_to history = %s", pprint.pformat(self._move_from))
+        log.debug("do_r_e: notebook_page_history = %s", pprint.pformat(self._switched_to_pages))
+
+        print "Moving back to ", self.screen_history[-1]
+        print "lsh: %s" % (self.screen_history)
+        # FIXME: for autowizard
+        self._set_screen(self.screen_history[-1])
 
     def _on_screen_register_error(self, obj, msg, exc_info):
         log.debug("_on_screen_register_error obj=%s msg=%s exc_info=%s",
                   obj, msg, exc_info)
+        print "on_s_r_e nm page: ", self.register_notebook.get_property('page')
         # Now emit a new signal for parent widget and self.do_register_error()
         # to handle
         self.emit('register-error', msg, exc_info)
         return False
 
     def _on_stay_on_screen(self, current_screen):
+        print "STAYING ON SCREEN: cur", current_screen, "idx: ", \
+            current_screen.screens_index, "_cur:", self._current_screen
+        self.screen_history.append(current_screen.screens_index)
         self._set_screen(self._current_screen)
 
     # TODO: replace most of the gui flow logic in the Screen subclasses with
@@ -335,6 +368,17 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
                   current_screen, next_screen_id)
 
+        # TODO: we know the Screen object that called this, the id of
+        #       the screen we want to go to, and we can ask register_notebook
+        #       for it's current page. Let's track those so we can go 'back'
+
+        # transition from a progress page to a 'gui' page will be tracked
+        # so we can know which gui screens, not including progress, were before
+        # the current screen
+        origin_notebook_page = self.register_notebook.get_property('page')
+        log.debug("CURRENT ORIGIN NOTEBOOK PAGE: %s", origin_notebook_page)
+
+        self._move_from.append(origin_notebook_page)
         self.change_screen(next_screen_id)
 
     def change_screen(self, next_screen_id):
@@ -359,12 +403,16 @@ class RegisterWidget(widgets.SubmanBaseWidget):
             if self._screens[screen].needs_gui:
                 next_notebook_page = self._screens[screen].index
         else:
+            # TODO: replace with a generator
             next_notebook_page = screen + 1
 
         log.debug("Moving from notebook page: %s to page: %s",
                   current_notebook_page, next_notebook_page)
 
         self.register_notebook.set_current_page(next_notebook_page)
+
+        log.debug("move_to history = %s", pprint.pformat(self._move_from))
+        log.debug("switched_to_history = %s", pprint.pformat(self._switched_to_pages))
 
     # FIXME: figure out to determine we are on first screen, then this
     # could just be 'move-to-screen', next screen
@@ -543,7 +591,8 @@ class AutobindWizard(RegisterDialog):
 
     def __init__(self, backend, facts, parent):
         super(AutobindWizard, self).__init__(backend, facts, parent)
-        self.initial_screen = SELECT_SLA_PAGE
+        self.register_widget.initial_screen = SELECT_SLA_PAGE
+        self.register_widget.screen_history.append(SELECT_SLA_PAGE)
 
     def show(self):
         super(AutobindWizard, self).show()
@@ -560,6 +609,7 @@ class AutobindWizard(RegisterDialog):
 class Screen(widgets.SubmanBaseWidget):
     widget_names = ['container']
     gui_file = None
+    screen_enum = None
 
     # TODO: replace page int with class enum
     __gsignals__ = {'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
@@ -603,6 +653,7 @@ class Screen(widgets.SubmanBaseWidget):
 
 
 class NoGuiScreen(ga_GObject.GObject):
+    screen_enum = None
 
     __gsignals__ = {'identity-updated': (ga_GObject.SIGNAL_RUN_FIRST,
                                          None, []),
@@ -635,7 +686,7 @@ class NoGuiScreen(ga_GObject.GObject):
         return True
 
     def apply(self):
-        self.emit('move-to-screen', 1)
+        self.emit('move-to-screen')
 
     def post(self):
         pass
@@ -650,6 +701,7 @@ class ProgressScreen(NoGuiScreen):
 
 
 class PerformRegisterScreen(NoGuiScreen):
+    screen_enum = PERFORM_REGISTER_PAGE
 
     def __init__(self, parent):
         super(PerformRegisterScreen, self).__init__(parent)
@@ -703,6 +755,7 @@ class PerformRegisterScreen(NoGuiScreen):
 
 
 class PerformSubscribeScreen(NoGuiScreen):
+    screen_enum = PERFORM_SUBSCRIBE_PAGE
 
     def __init__(self, parent):
         super(PerformSubscribeScreen, self).__init__(parent)
@@ -730,7 +783,7 @@ class PerformSubscribeScreen(NoGuiScreen):
 
 class ConfirmSubscriptionsScreen(Screen):
     """ Confirm Subscriptions GUI Window """
-
+    screen_enum = CONFIRM_SUBS_PAGE
     widget_names = Screen.widget_names + ['subs_treeview', 'back_button',
                                           'sla_label']
 
@@ -793,6 +846,7 @@ class SelectSLAScreen(Screen):
     An wizard screen that displays the available
     SLAs that are provided by the installed products.
     """
+    screen_enum = SELECT_SLA_PAGE
     widget_names = Screen.widget_names + ['product_list_label',
                                           'sla_radio_container',
                                           'owner_treeview']
@@ -897,11 +951,21 @@ class SelectSLAScreen(Screen):
 
         (current_sla, unentitled_products, sla_data_map) = result
 
+        log.debug("result=%s", result)
+        log.debug("current_sla=%s, unentitled_products=%s, sla_data_map=%s",
+                  current_sla, unentitled_products, sla_data_map)
         self._parent.info.set_property('current-sla', current_sla)
+        log.debug("current_sla=%s, unentitled_products=%s, sla_data_map=%s",
+                  current_sla, unentitled_products, sla_data_map)
 
-        log.debug("current_sla=%s", current_sla)
-        log.debug("unentitled_products=%s", unentitled_products)
-        log.debug("sla_data_map=%s", sla_data_map)
+        try:
+            log.debug("current_sla=%s", current_sla)
+            log.debug("unentitled_products=%s", unentitled_products)
+            log.debug("sla_data_map=%s len=%s", sla_data_map, len(sla_data_map))
+            log.debug("sla_data_map %s", pprint.pformat(sla_data_map))
+        except Exception, e:
+            self.emit('register-error', 'logging dumb', e)
+            return
 
         if len(sla_data_map) == 1:
             # If system already had a service level, we can hit this point
@@ -1148,17 +1212,16 @@ class CredentialsScreen(Screen):
         return False
 
     def apply(self):
+        self.stay()
         username = self.account_login.get_text().strip()
         password = self.account_password.get_text().strip()
         consumername = self.consumer_name.get_text()
         skip_auto_bind = self.skip_auto_bind.get_active()
 
         if not self._validate_consumername(consumername):
-            self.stay()
             return
 
         if not self._validate_account():
-            self.stay()
             return
 
         self._parent.info.set_property('username', username)
@@ -1193,21 +1256,19 @@ class ActivationKeyScreen(Screen):
             self.consumer_entry.set_text(socket.gethostname())
 
     def apply(self):
+        self.stay()
         activation_keys = self._split_activation_keys(
             self.activation_key_entry.get_text().strip())
         owner_key = self.organization_entry.get_text().strip()
         consumername = self.consumer_entry.get_text().strip()
 
         if not self._validate_owner_key(owner_key):
-            self.stay()
             return
 
         if not self._validate_activation_keys(activation_keys):
-            self.stay()
             return
 
         if not self._validate_consumername(consumername):
-            self.stay()
             return
 
         self._parent.info.set_property('consumername', consumername)
@@ -1325,6 +1386,7 @@ class ChooseServerScreen(Screen):
             log.warn("Error from reset_resolver: %s", e)
 
     def apply(self):
+        self.stay()
         server = self.server_entry.get_text()
         try:
             (hostname, port, prefix) = parse_server_info(server)
@@ -1340,13 +1402,11 @@ class ChooseServerScreen(Screen):
                               _("Unable to reach the server at %s:%s%s") %
                                 (hostname, port, prefix),
                               None)
-                    self.stay()
                     return
             except MissingCaCertException:
                 self.emit('register-error',
                           _("CA certificate for subscription service has not been installed."),
                           None)
-                self.stay()
                 return
 
         except ServerUrlParseError:
@@ -1354,7 +1414,6 @@ class ChooseServerScreen(Screen):
                       _("Please provide a hostname with optional port and/or prefix: "
                         "hostname[:port][/prefix]"),
                       None)
-            self.stay()
             return
 
         log.debug("Writing server data to rhsm.conf")
@@ -1693,6 +1752,7 @@ class InfoScreen(Screen):
         return False
 
     def apply(self):
+        self.stay()
         if self.register_radio.get_active():
             log.debug("Proceeding with registration.")
             self.emit('move-to-screen', CHOOSE_SERVER_PAGE)
