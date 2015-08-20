@@ -965,7 +965,6 @@ class SelectSLAScreen(Screen):
 
         self._parent.info.set_property('current-sla', current_sla)
 
-
         if len(sla_data_map) == 1:
             # If system already had a service level, we can hit this point
             # when we cannot fix any unentitled products:
@@ -1004,6 +1003,10 @@ class SelectSLAScreen(Screen):
         self._parent.set_property('details-label-txt', self.pre_message)
         self._parent.set_property('register-state', SUBSCRIBING)
         self._parent.identity.reload()
+        log.debug("sla_screen pre identity=%s uuid=%s facts=%s",
+                  self._parent.identity,
+                  self._parent.identity.uuid,
+                  self._parent.facts)
         self._parent.async.find_service_levels(self._parent.identity.uuid,
                                                self._parent.facts,
                                                self._on_get_service_levels_cb)
@@ -1648,10 +1651,15 @@ class AsyncBackend(object):
             self.queue.put((callback, None, sys.exc_info()))
 
     def _refresh(self, callback):
+        log.debug("_refresh: callbacl=%s", callback)
         try:
             managerlib.fetch_certificates(self.backend.certlib)
+            log.debug("cert fetched: %s",
+                      (callback, None, None))
             self.queue.put((callback, None, None))
         except Exception:
+            log.debug("_refresh exception: %s",
+                      (callback, None, sys.exc_info()))
             self.queue.put((callback, None, sys.exc_info()))
 
     def _watch_thread(self):
@@ -1711,6 +1719,7 @@ class AsyncBackend(object):
                          args=(callback,)).start()
 
 
+#TODO: make this a more informative 'summary' page.
 class DoneScreen(Screen):
     gui_file = "done_box"
 

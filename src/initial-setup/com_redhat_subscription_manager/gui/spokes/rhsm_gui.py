@@ -39,6 +39,7 @@ from subscription_manager.gui import managergui
 from subscription_manager.injectioninit import init_dep_injection
 from subscription_manager import injection as inj
 from subscription_manager.gui import registergui
+from subscription_manager.gui import utils
 
 ga_GObject.threads_init()
 
@@ -71,7 +72,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         backend = managergui.Backend()
 
         self.register_widget = registergui.RegisterWidget(backend, facts,
-                                                          parent=self.main_window)
+                                                          parent_window=self.main_window)
         self.register_box = self.builder.get_object("register_box")
         self.button_box = self.builder.get_object('navigation_button_box')
         self.proceed_button = self.builder.get_object('proceed_button')
@@ -86,35 +87,27 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self.cancel_button.connect('clicked', self.cancel)
 
         # initial-setup will likely
-        #self.register_widget.connect('finished', self.finished)
-        #self.register_widget.connect('register-error', self.on_register_error)
-        #self.register_widget.connect('register-failure', self._on_register_failure)
-        #self.register_widget.connect('attach-error', self.on_attach_error)
-        #self.register_widget.connect('attach-failure', self._on_attach_failure)
-        #self.register_widget.connect('register-error-foo', self._on_register_error_foo)
-        self.register_widget.connect('register-error', self._on_error)
+        self.register_widget.connect('finished', self.finished)
+        self.register_widget.connect('register-finished', self.register_finished)
+        self.register_widget.connect('register-error', self._on_register_error)
 
         # update the 'next/register button on page change'
         self.register_widget.connect('notify::register-button-label',
                                        self._on_register_button_label_change)
 
-        # update completed and status on register state changes
-        self.register_widget.connect('notify::register-state',
-                                     self._on_register_state_change)
-
         self.register_box.show_all()
         self.register_widget.initialize()
 
-    def _on_error(self, widget, *args):
-        log.debug("-on_error widget=%s args=%s", widget, args)
-        print "RHSMSPoke._on_error"
-        self.set_error("%s" % args)
 
-    # callback to attach to RegisterWidgets finished signal
-    def finished(self, button):
+    # handler for RegisterWidgets 'finished' signal
+    def finished(self, obj):
         self._done = True
-        self.register_widget.done()
         really_hide(self.button_box)
+
+    # If we completed registration, that's close enough to consider
+    # completed.
+    def register_finished(self, obj):
+        self._done = True
 
     # Update gui widgets to reflect state of self.data
     # This could also be used to pre populate partial answers from a ks
@@ -122,7 +115,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def refresh(self):
         log.debug("data.addons.com_redhat_subscription_manager %s",
                   self.data.addons.com_redhat_subscription_manager)
-
         pass
 
     # take info from the gui widgets and set into the self.data
@@ -130,7 +122,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self.data.addons.com_redhat_subscription_manager.text = \
             "System is registered to Red Hat Subscription Management."
 
-    # when the spoke is left, then can run anything that happens
+    # when the spoke is left, this can run anything that happens
     def execute(self):
         pass
 
@@ -145,7 +137,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def ready(self):
         return True
 
-    # Indicate if all the mandotory actions are completed
+    # Indicate if all the mandatory actions are completed
     @property
     def completed(self):
         # TODO: tie into register_widget.info.register-state
@@ -161,42 +153,28 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     @property
     def status(self):
         if self._done:
+            # TODO: add consumer uuid, products, etc?
             return "System is registered to RHSM."
         else:
             return "System is not registered to RHSM."
 
     def _on_register_button_clicked(self, button):
         log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
+        # unset any error info
         self.clear_info()
+
         self.register_widget.emit('proceed')
 
-    # FIXME: REMOVE: replace on_register_error
-    def _on_register_error_foo(self, widget, msg):
+    def _on_register_error(self, widget, msg, exc_info):
         log.debug("rhsm_gui _on_register_error_foo widget=%s msg=%s",
                   widget, msg)
-        self.set_error(msg)
 
-    def on_register_error(self, args):
-        log.debug("register_dialog.on_register_error args=%s", args)
-        # FIXME: can we just ignore this for sm-gui?
-        self.register_widget.register_error_screen()
-
-    def on_attach_error(self, args):
-        log.debug("register_dialog.on_attach_error args=%s", args)
-        # FIXME: can we just ignore this for sm-gui?
-        self.register_widget.attach_error_screen()
-
-    def _on_register_failure(self, args):
-        # TODO: go to a failure screen, once we add it to RegisterWidget
-        log.debug("_on_register_failure, args=%s", args)
-        # FIXME:
-        self.set_error("Register failed.")
-
-    # If we get an 'attach-failure' signal, but suceeded in registering,
-    # we can count that as 'completed'
-    def _on_attach_failure(self, args):
-        log.debug("_on_attach_failure, args=%s", args)
-        self.set_error("Attach failed.")
+        if exc_info:
+            formatted_msg = utils.format_exception(exc_info, msg)
+            log.debug("_on_register_error formatted_msg=%s", formatted_msg)
+            self.set_error(formatted_msg)
+        else:
+            self.set_error(msg)
 
     def _on_register_button_label_change(self, obj, value):
         log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
@@ -206,9 +184,3 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
 
         if register_label:
             self.proceed_button.set_label(register_label)
-
-    def _on_register_state_change(self, obj, value):
-        state = obj.get_property('register-state')
-        # If we are past registration, that's 'completed' enough
-        if state != registergui.REGISTERING:
-            self.completed = True
