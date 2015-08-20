@@ -98,7 +98,6 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
         self.register_box.show_all()
         self.register_widget.initialize()
 
-
     # handler for RegisterWidgets 'finished' signal
     def finished(self, obj):
         self._done = True
@@ -159,7 +158,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
             return "System is not registered to RHSM."
 
     def _on_register_button_clicked(self, button):
-        log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
+        #log.debug("dialog on_register_button_clicked, button=%s, %s", button, self.register_widget)
         # unset any error info
         self.clear_info()
 
@@ -177,10 +176,7 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
             self.set_error(msg)
 
     def _on_register_button_label_change(self, obj, value):
-        log.debug('_on_register_button_label_change obj=%s value=%s', obj, value)
         register_label = obj.get_property('register-button-label')
-        log.debug('register_label=%s', register_label)
-        log.debug('self.proceed_button %s', self.proceed_button)
 
         if register_label:
             self.proceed_button.set_label(register_label)

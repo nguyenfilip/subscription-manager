@@ -306,7 +306,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.backend.update()
 
     def _on_activation_keys_change(self, obj, param):
-        log.debug("_on_activation_keys_change obj=%s param=%s", obj, param)
         activation_keys = obj.get_property('activation-keys')
 
         # Unset backend from attempting to use basic auth
@@ -320,8 +319,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     def do_register_error(self, msg, exc_info):
         log.debug("RW.do_register_error msg=%s exc_info=%s",
                    msg, exc_info)
-        log.debug("do_register_error: screen_history=%s", self.screen_history)
-        log.debug("Moving back to %s", self.screen_history[-1])
 
         # return to the last gui screen we showed
         self._set_screen(self.screen_history[-1])
@@ -378,9 +375,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # as well as sending the register_notebook to the correct page in the
     # notebook widget.
     def _set_screen(self, screen):
-        log.debug("registerWidget._set_screen _current_screen=%s screen=%s",
-                  self._current_screen, screen)
-
         next_notebook_page = screen
 
         if screen > PROGRESS_PAGE:
@@ -402,13 +396,11 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # could just be 'move-to-screen', next screen
     # Go to the next screen/state
     def _on_proceed(self, obj):
-        log.debug("registerWidget._on_proceed obj=%s", obj)
         self.apply_current_screen()
 
     # extract any info from the widgets and call the screens apply
     def apply_current_screen(self):
         result = self._screens[self._current_screen].apply()
-        log.debug("current screen.apply result=%s", result)
 
     # A 'register-finished' signal emitted from one of our Screens, indicating
     # that we are finished with registration (either completly, or because it's
@@ -636,7 +628,7 @@ class Screen(widgets.SubmanBaseWidget):
 
     def __init__(self, parent):
         super(Screen, self).__init__()
-        log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
+    #    log.debug("Screen %s init parent=%s", self.__class__.__name__, parent)
 
         self.pre_message = ""
         self.button_label = _("Register")
@@ -902,7 +894,6 @@ class SelectSLAScreen(Screen):
         log.debug("_radio_clicked button=%s data=%s",
                   button, data)
         sla, sla_data_map = data
-        log.debug("sla=%s sla_data_map=%s", sla, sla_data_map)
 
         if button.get_active():
             self._parent.info.set_property('dry-run-result',
@@ -929,29 +920,31 @@ class SelectSLAScreen(Screen):
                   result, error)
         if error is not None:
             if isinstance(error[1], ServiceLevelNotSupportedException):
-                # TODO: handle these with props/signals, ditch the self._parent
-                OkDialog(_("Unable to auto-attach, server does not support service levels."),
-                        parent=self._parent.parent_window)
+                #OkDialog(_("Unable to auto-attach, server does not support service levels."),
+                #        parent=self._parent.parent_window)
+                msg = _("Unable to auto-attach, server does not support service levels.")
+                self.emit('register-error', msg, None)
                 # HMM: if we make the ok a register-error as well, we may get
                 # wacky ordering if the register-error is followed immed by a
                 # register-finished?
                 self.emit('attach-finished')
                 return
             elif isinstance(error[1], NoProductsException):
-                InfoDialog(_("No installed products on system. No need to attach subscriptions at this time."),
-                           parent=self._parent.parent_window)
+                msg = _("No installed products on system. No need to attach subscriptions at this time.")
+                self.emit('register-error', msg, None)
                 self.emit('attach-finished')
                 return
             elif isinstance(error[1], AllProductsCoveredException):
-                InfoDialog(_("All installed products are covered by valid entitlements. No need to attach subscriptions at this time."),
-                           parent=self._parent.parent_window)
+                msg = _("All installed products are covered by valid entitlements. "
+                        "No need to attach subscriptions at this time.")
+                self.emit('register-error', msg, None)
                 self.emit('attach-finished')
                 return
             elif isinstance(error[1], GoneException):
                 # FIXME: shoudl we log here about deleted consumer or
                 #        did we do that when we created GoneException?
-                InfoDialog(_("Consumer has been deleted."),
-                           parent=self._parent.parent_window)
+                msg = _("Consumer has been deleted.")
+                self.emit('register-error', msg, None)
                 return
                 # TODO: where we should go from here?
             else:
@@ -1071,7 +1064,6 @@ class EnvironmentScreen(Screen):
         self.emit('move-to-screen', PERFORM_REGISTER_PAGE)
 
     def set_environment(self, environment):
-        log.debug("EnvScreen.set_environment %s", environment)
         self._parent.info.set_property('environment', environment)
 
     def set_model(self, envs):
@@ -1179,8 +1171,6 @@ class CredentialsScreen(Screen):
                       _("You must enter a system name."),
                       None)
 
-            log.debug("NOTE: we should be staying on credentials screen here")
-
             self.consumer_name.grab_focus()
             return False
         return True
@@ -1192,8 +1182,6 @@ class CredentialsScreen(Screen):
                       _("You must enter a login."),
                       None)
 
-            log.debug("NOTE: stay on cred screen")
-
             self.account_login.grab_focus()
             return False
 
@@ -1201,8 +1189,6 @@ class CredentialsScreen(Screen):
             self.emit('register-error',
                       _("You must enter a password."),
                       None)
-
-            log.debug("NOTE: stay on cred screen")
 
             self.account_password.grab_focus()
             return False
@@ -1289,8 +1275,6 @@ class ActivationKeyScreen(Screen):
                       _("You must enter an organization."),
                       None)
 
-            log.debug("NOTE: stay on act key page")
-
             self.organization_entry.grab_focus()
             return False
         return True
@@ -1301,8 +1285,6 @@ class ActivationKeyScreen(Screen):
                       _("You must enter an activation key."),
                       None)
 
-            log.debug("NOTE: stay on act key page")
-
             self.activation_key_entry.grab_focus()
             return False
         return True
@@ -1312,8 +1294,6 @@ class ActivationKeyScreen(Screen):
             self.emit('register-error',
                       _("You must enter a system name."),
                       None)
-
-            log.debug("NOTE: stay on act key page")
 
             self.consumer_entry.grab_focus()
             return False
