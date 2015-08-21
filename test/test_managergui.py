@@ -25,8 +25,11 @@ class TestManagerGuiMainWindow(SubManFixture):
 
 class TestRegisterScreen(unittest.TestCase):
     def test_register_screen(self):
-        registergui.RegisterScreen(stubs.StubBackend())
+        registergui.RegisterDialog(stubs.StubBackend())
 
     def test_register_screen_register(self):
-        rs = registergui.RegisterScreen(stubs.StubBackend())
-        rs.register()
+        rd = registergui.RegisterDialog(stubs.StubBackend())
+        #rs.initialize()
+        rd.show()
+        rd.register_dialog.hide()
+        #rs.cancel()

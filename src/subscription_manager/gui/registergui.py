@@ -320,8 +320,8 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # return to the last gui screen we showed
         self._set_screen(self.screen_history[-1])
 
-    # Handler 'register-error' signals emitted from the Screens, then
-    # emit one or selfs.
+    # Handler for 'register-error' signals emitted from the Screens, then
+    # emit one ourselves.
     def _on_screen_register_error(self, obj, msg, exc_info):
         log.debug("_on_screen_register_error obj=%s msg=%s exc_info=%s",
                   obj, msg, exc_info)
@@ -347,7 +347,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     #       indicating each state
 
     # handle the 'move-to-screen' signal, indicating a Screen needs to send the
-    # user someone aside from the 'next' screen. For example, to skip SLA
+    # user somewhere aside from the 'next' screen. For example, to skip SLA
     # selection if there is only one SLA.
     def _on_move_to_screen(self, current_screen, next_screen_id):
         log.debug("_on_move_to_screen current_screen_id=%s next_screen_id=%s",
