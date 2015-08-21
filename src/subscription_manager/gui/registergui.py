@@ -23,8 +23,6 @@ import socket
 import sys
 import threading
 
-import pprint
-
 from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.ga import GObject as ga_GObject
 
@@ -46,7 +44,6 @@ from subscription_manager.gui.utils import format_exception, show_error_window
 from subscription_manager.gui.autobind import DryRunResult, \
         ServiceLevelNotSupportedException, AllProductsCoveredException, \
         NoProductsException
-from subscription_manager.gui.messageWindow import InfoDialog, OkDialog
 from subscription_manager.jsonwrapper import PoolWrapper
 
 _ = lambda x: gettext.ldgettext("rhsm", x)
@@ -159,18 +156,18 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                     'register_details_label', 'register_progressbar',
                     'progress_label']
 
-    __gsignals__ = {'proceed': (ga_GObject.SIGNAL_RUN_FIRST,
+    __gsignals__ = {'proceed': (ga_GObject.SignalFlags.RUN_FIRST,
                                 None, []),
-                    'register-warning': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-warning': (ga_GObject.SignalFlags.RUN_FIRST,
                                          None, (ga_GObject.TYPE_PYOBJECT,)),
-                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
                                        None, (ga_GObject.TYPE_PYOBJECT,
                                               ga_GObject.TYPE_PYOBJECT)),
-                    'finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'attach-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'attach-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                         None, []),
-                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                           None, [])}
 
     initial_screen = CHOOSE_SERVER_PAGE
@@ -236,6 +233,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                           InfoScreen, DoneScreen]
         self._screens = []
 
+        # TODO: current_screen as a gobject property
         for idx, screen_class in enumerate(screen_classes):
             screen = screen_class(parent=self)
 
@@ -601,16 +599,16 @@ class Screen(widgets.SubmanBaseWidget):
     screen_enum = None
 
     # TODO: replace page int with class enum
-    __gsignals__ = {'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+    __gsignals__ = {'stay-on-screen': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'attach-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'attach-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
                               None, (ga_GObject.TYPE_PYOBJECT,
                                      ga_GObject.TYPE_PYOBJECT)),
-                    'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'move-to-screen': (ga_GObject.SignalFlags.RUN_FIRST,
                                      None, (int,))}
 
     def __init__(self, parent):
@@ -646,20 +644,20 @@ class Screen(widgets.SubmanBaseWidget):
 class NoGuiScreen(ga_GObject.GObject):
     screen_enum = None
 
-    __gsignals__ = {'identity-updated': (ga_GObject.SIGNAL_RUN_FIRST,
+    __gsignals__ = {'identity-updated': (ga_GObject.SignalFlags.RUN_FIRST,
                                          None, []),
-                    'move-to-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'move-to-screen': (ga_GObject.SignalFlags.RUN_FIRST,
                                        None, (int,)),
-                    'stay-on-screen': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'stay-on-screen': (ga_GObject.SignalFlags.RUN_FIRST,
                                        None, []),
-                    'register-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'attach-finished': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'attach-finished': (ga_GObject.SignalFlags.RUN_FIRST,
                                  None, []),
-                    'register-error': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'register-error': (ga_GObject.SignalFlags.RUN_FIRST,
                               None, (ga_GObject.TYPE_PYOBJECT,
                                      ga_GObject.TYPE_PYOBJECT)),
-                    'certs-updated': (ga_GObject.SIGNAL_RUN_FIRST,
+                    'certs-updated': (ga_GObject.SignalFlags.RUN_FIRST,
                                       None, [])}
 
     def __init__(self, parent):

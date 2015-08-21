@@ -137,8 +137,6 @@ class SubmanBaseWidget(ga_GObject.GObject):
         self.log = logging.getLogger('rhsm-app.' + __name__ +
                                      '.' + self.__class__.__name__)
 
-
-
     def _gui_factory(self):
         gui = BuilderFileBasedWidget.from_file(self.gui_file)
         return gui
