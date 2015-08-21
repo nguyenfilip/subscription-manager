@@ -1,4 +1,4 @@
-#
+ #
 # Registration dialog/wizard
 #
 # Copyright (c) 2011 Red Hat, Inc.
@@ -470,7 +470,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
     widget_names = ['register_dialog', 'register_dialog_main_vbox',
                     'register_progressbar', 'register_details_label',
                     'cancel_button', 'register_button', 'progress_label',
-                    'dialog_vbox6']
+                    'dialog_vbox6', 'infobar']
 
     gui_file = "register_dialog"
     __gtype_name__ = 'RegisterDialog'
@@ -499,6 +499,14 @@ class RegisterDialog(widgets.SubmanBaseWidget):
 
         self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
                                                   True, True, 0)
+
+        self.infobar.hide()
+        self.infobar.set_message_type(ga_Gtk.MessageType.ERROR)
+        self.infobar_content = self.infobar.get_content_area()
+        # a RegisterError with property for label?
+        self.infobar_label = ga_Gtk.Label()
+        self.infobar_label.show()
+        self.infobar_content.pack_start(self.infobar_label, True, True, 0)
 
         self.register_button.connect('clicked', self._on_register_button_clicked)
         self.cancel_button.connect('clicked', self.cancel)
@@ -555,9 +563,18 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         self.error_dialog(obj, message)
 
     def error_dialog(self, obj, msg):
-        show_error_window(msg)
+        #show_error_window(msg)
+        self.error_info_bar(obj, msg)
+
+    def error_info_bar(self, obj, msg):
+        self.infobar_label.set_label(msg)
+        self.infobar.show()
+
+    def clear_info(self):
+        self.infobar.hide()
 
     def _on_register_button_clicked(self, button):
+        self.clear_info()
         self.register_widget.emit('proceed')
 
     def _on_register_state_change(self, obj, value):
