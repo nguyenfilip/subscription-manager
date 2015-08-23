@@ -109,6 +109,7 @@ from subscription_manager import ga_loader
 ga_loader.init_ga()
 
 from subscription_manager.ga import Gtk as ga_Gtk
+from subscription_manager.ga import Gdk as ga_Gdk
 from subscription_manager.ga import gtk_compat
 
 gtk_compat.threads_init()
@@ -196,6 +197,11 @@ if __name__ == '__main__':
             sys.exit()
 
     try:
+        prov = ga_Gtk.CssProvider()
+        prov.load_from_path("/home/adrian/.config/gtk-3.0/gtk.css")
+        sc = ga_Gtk.StyleContext()
+        screen = ga_Gdk.Screen().get_default()
+        ga_Gtk.StyleContext.add_provider_for_screen(screen, prov, 100)
         main = managergui.MainWindow(auto_launch_registration=options.register)
 
         # Hook into dbus service - only if it is available
