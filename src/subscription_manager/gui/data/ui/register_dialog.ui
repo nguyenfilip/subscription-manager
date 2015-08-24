@@ -4,7 +4,6 @@
   <requires lib="gtk+" version="3.12"/>
   <object class="GtkDialog" id="register_dialog">
     <property name="can_focus">False</property>
-    <property name="halign">start</property>
     <property name="valign">start</property>
     <property name="title" translatable="yes">System Registration</property>
     <property name="resizable">False</property>
@@ -18,22 +17,28 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="valign">end</property>
+        <property name="hexpand">True</property>
         <property name="orientation">vertical</property>
         <property name="spacing">2</property>
         <child internal-child="action_area">
           <object class="GtkButtonBox" id="dialog-action_area3">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="margin_left">3</property>
+            <property name="margin_right">3</property>
+            <property name="margin_top">3</property>
+            <property name="margin_bottom">3</property>
+            <property name="hexpand">True</property>
             <property name="baseline_position">bottom</property>
-            <property name="layout_style">end</property>
+            <property name="layout_style">start</property>
             <child>
               <object class="GtkButton" id="cancel_button">
                 <property name="label">gtk-cancel</property>
+                <property name="name">CancelButton</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="use_stock">True</property>
-                <property name="image_position">right</property>
                 <child internal-child="accessible">
                   <object class="AtkObject" id="cancel_button-atkobject">
                     <property name="AtkObject::accessible-name">cancel_button</property>
@@ -66,6 +71,7 @@
                 <property name="expand">False</property>
                 <property name="fill">False</property>
                 <property name="position">1</property>
+                <property name="secondary">True</property>
               </packing>
             </child>
             <child internal-child="accessible">
@@ -75,25 +81,40 @@
             </child>
           </object>
           <packing>
-            <property name="expand">False</property>
-            <property name="fill">False</property>
-            <property name="pack_type">end</property>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkAlignment" id="content_area_alignment">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="hexpand">True</property>
+            <child>
+              <object class="GtkBox" id="content_area">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <placeholder/>
+                </child>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
             <property name="position">0</property>
           </packing>
         </child>
         <child>
-          <placeholder/>
-        </child>
-        <child>
-          <placeholder/>
-        </child>
-        <child>
           <object class="GtkInfoBar" id="infobar">
-            <property name="visible">True</property>
             <property name="app_paintable">True</property>
             <property name="can_focus">False</property>
             <child internal-child="action_area">
-              <object class="GtkButtonBox" id="infobar-action_area1">
+              <object class="GtkButtonBox" id="infobar-action_area">
                 <property name="can_focus">False</property>
                 <property name="spacing">6</property>
                 <property name="layout_style">end</property>
@@ -114,7 +135,8 @@
               </packing>
             </child>
             <child internal-child="content_area">
-              <object class="GtkBox" id="infobar-content_area1">
+              <object class="GtkBox" id="infobar-content_area">
+                <property name="name">RegisterDialogInfobarContentArea</property>
                 <property name="can_focus">False</property>
                 <property name="spacing">16</property>
                 <child>
@@ -140,7 +162,7 @@
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">3</property>
+            <property name="position">1</property>
           </packing>
         </child>
         <child internal-child="accessible">
@@ -155,5 +177,12 @@
         <property name="AtkObject::accessible-name">register_dialog</property>
       </object>
     </child>
+  </object>
+  <object class="GtkSizeGroup" id="sizegroup1">
+    <property name="mode">both</property>
+    <widgets>
+      <widget name="register_button"/>
+      <widget name="cancel_button"/>
+    </widgets>
   </object>
 </interface>

@@ -180,8 +180,10 @@ class MainWindow(widgets.SubmanBaseWidget):
 
         self.import_sub_dialog = ImportSubDialog()
 
-        self.network_config_dialog = networkConfig.NetworkConfigDialog()
-        self.network_config_dialog.saveButton.connect("clicked", self._config_changed)
+        #self.network_config_dialog = networkConfig.NetworkConfigDialog()
+
+        # FIXME: emit 'saved' signal to hook to here
+        #self.network_config_dialog.saveButton.connect("clicked", self._config_changed)
 
         self.redeem_dialog = redeem.RedeemDialog(self.backend)
 

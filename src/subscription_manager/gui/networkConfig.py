@@ -28,6 +28,7 @@ from rhsm.utils import remove_scheme
 from rhsm.utils import parse_url
 
 from subscription_manager.ga import GObject as ga_GObject
+from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.gui.utils import show_error_window
 import subscription_manager.injection as inj
 
@@ -40,8 +41,35 @@ DIR = os.path.dirname(__file__)
 
 log = logging.getLogger('rhsm-app.' + __name__)
 
+import traceback
+
 
 class NetworkConfigDialog(widgets.SubmanBaseWidget):
+    widget_names = ["networkConfigDialog", "network_config_content_area"]
+    gui_file = "networkConfig"
+
+    def __init__(self):
+        super(NetworkConfigDialog, self).__init__()
+        traceback.print_stack()
+        self.networkConfigDialog.connect("delete-event", self.deleted)
+        self.network_config_widget_wrapper = NetworkConfigWidget()
+        self.network_config_widget = self.network_config_widget_wrapper.proxy_config_widget
+        self.network_config_content_area.pack_start(self.network_config_widget,
+                                                    True, True, 0)
+
+    def set_parent_window(self, window):
+        self.networkConfigDialog.set_transient_for(window)
+
+    def show(self):
+        self.network_config_widget_wrapper.set_initial_values()
+        self.networkConfigDialog.present()
+
+    def deleted(self, event, data):
+        # FIXME:
+        self.networkConfigDialog.hide()
+
+
+class NetworkConfigWidget(widgets.SubmanBaseWidget):
     """This is the dialog that allows setting http proxy settings.
 
     It uses the instant apply paradigm or whatever you wanna call it that the
@@ -49,29 +77,35 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
     changed, the new setting will be saved.
 
     """
-    widget_names = ["networkConfigDialog", "enableProxyButton", "enableProxyAuthButton",
+    widget_names = ["proxy_config_widget", "enableProxyButton", "enableProxyAuthButton",
                     "proxyEntry", "proxyUserEntry", "proxyPasswordEntry",
                     "cancelButton", "saveButton", "testConnectionButton",
-                    "connectionStatusLabel"]
+                    "infobar", "proxy_config_content_area"]
     gui_file = "networkConfig"
 
     def __init__(self):
-        # Get widgets we'll need to access
-
-        super(NetworkConfigDialog, self).__init__()
+        super(NetworkConfigWidget, self).__init__()
         self.org_timeout = socket.getdefaulttimeout()
         self.progress_bar = None
 
         self.cfg = rhsm.config.initConfig()
         self.cp_provider = inj.require(inj.CP_PROVIDER)
 
+        self.infobar_content = self.infobar.get_content_area()
+        self.infobar_label = ga_Gtk.Label()
+        self.infobar_label.show()
+        self.infobar_content.pack_start(self.infobar_label, False, False, 0)
+        self.infobar.set_visible(False)
+
         # Need to load values before connecting signals because when the dialog
         # starts up it seems to trigger the signals which overwrites the config
         # with the blank values.
         self.set_initial_values()
+
         self.enableProxyButton.connect("toggled", self.enable_action)
         self.enableProxyAuthButton.connect("toggled", self.enable_action)
 
+        # TODO: these could just watch for notify onproperties for proxy settings
         self.enableProxyButton.connect("toggled", self.clear_connection_label)
         self.enableProxyAuthButton.connect("toggled", self.clear_connection_label)
 
@@ -86,8 +120,6 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
         self.cancelButton.connect("clicked", self.on_cancel_clicked)
         self.saveButton.connect("clicked", self.on_save_clicked)
         self.testConnectionButton.connect("clicked", self.on_test_connection_clicked)
-
-        self.networkConfigDialog.connect("delete-event", self.deleted)
 
     def set_initial_values(self):
         proxy_url = self.cfg.get("server", "proxy_hostname") or ""
@@ -110,7 +142,7 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
         # the extra or "" are to make sure we don't str None
         self.proxyUserEntry.set_text(str(self.cfg.get("server", "proxy_user") or ""))
         self.proxyPasswordEntry.set_text(str(self.cfg.get("server", "proxy_password") or ""))
-        self.connectionStatusLabel.set_label("")
+        #self.infobar_label.set_label("")
         # If there is no proxy information, disable the proxy test
         # button.
         if not self.enableProxyButton.get_active():
@@ -159,29 +191,29 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
                               _("Make sure that you own %s.") % self.cfg.fileName,
                                 parent=self.networkConfigDialog)
 
-    def show(self):
-        self.set_initial_values()
-        self.networkConfigDialog.present()
-
     def on_save_clicked(self, button):
         self.write_values()
-        self.networkConfigDialog.hide()
 
     def on_cancel_clicked(self, button):
-        self.networkConfigDialog.hide()
+        pass
+        # FIXME: 'reset' ?
 
     def enable_test_button(self, button):
         self.testConnectionButton.set_sensitive(button.get_active())
 
     def clear_connection_label(self, entry):
-        self.connectionStatusLabel.set_label("")
+        log.debug("clear_connection_label")
+        self.infobar_label.set_label("")
+        self.infobar.set_visible(False)
 
         # only used as callback from test_connection thread
     def on_test_connection_finish(self, result):
+        log.debug("otcf")
         if result:
-            self.connectionStatusLabel.set_label(_("Proxy connection succeeded"))
+            self.infobar_label.set_label(_("Proxy connection succeeded"))
         else:
-            self.connectionStatusLabel.set_label(_("Proxy connection failed"))
+            self.infobar_label.set_label(_("Proxy connection failed"))
+        self.infobar.set_visible(True)
         self._clear_progress_bar()
 
     def _reset_socket_timeout(self):
@@ -189,6 +221,7 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
 
     def test_connection_wrapper(self, proxy_host, proxy_port, proxy_user, proxy_password):
         connection_status = self.test_connection(proxy_host, proxy_port, proxy_user, proxy_password)
+        # FIXME: This could emit a 'test-connection-failed' signal
         ga_GObject.idle_add(self.on_test_connection_finish, connection_status)
 
     def test_connection(self, proxy_host, proxy_port, proxy_user, proxy_password):
@@ -268,7 +301,6 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
 
     def deleted(self, event, data):
         self.write_values()
-        self.networkConfigDialog.hide()
         self._clear_progress_bar()
         return True
 
@@ -279,7 +311,7 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
         else:
             self.progress_bar = progress.Progress(_("Testing Connection"), _("Please wait"))
             self.timer = ga_GObject.timeout_add(100, self.progress_bar.pulse)
-            self.progress_bar.set_transient_for(self.networkConfigDialog)
+            #self.progress_bar.set_transient_for(self.networkConfigDialog)
 
     def _clear_progress_bar(self):
         if not self.progress_bar:  # progress bar could be none iff self.test_connection is called directly
@@ -305,6 +337,3 @@ class NetworkConfigDialog(widgets.SubmanBaseWidget):
             self.proxyPasswordEntry.set_sensitive(button.get_active())
             self.get_object("usernameLabel").set_sensitive(button.get_active())
             self.get_object("passwordLabel").set_sensitive(button.get_active())
-
-    def set_parent_window(self, window):
-        self.networkConfigDialog.set_transient_for(window)

@@ -1,4 +1,4 @@
- #
+#
 # Registration dialog/wizard
 #
 # Copyright (c) 2011 Red Hat, Inc.
@@ -23,8 +23,6 @@ import socket
 import sys
 import threading
 
-import pprint
-
 from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.ga import GObject as ga_GObject
 
@@ -42,11 +40,10 @@ from subscription_manager import managerlib
 from subscription_manager.utils import is_valid_server_info, MissingCaCertException, \
         parse_server_info, restart_virt_who
 
-from subscription_manager.gui.utils import format_exception, show_error_window
+from subscription_manager.gui.utils import format_exception
 from subscription_manager.gui.autobind import DryRunResult, \
         ServiceLevelNotSupportedException, AllProductsCoveredException, \
         NoProductsException
-from subscription_manager.gui.messageWindow import InfoDialog, OkDialog
 from subscription_manager.jsonwrapper import PoolWrapper
 
 _ = lambda x: gettext.ldgettext("rhsm", x)
@@ -470,7 +467,7 @@ class RegisterDialog(widgets.SubmanBaseWidget):
     widget_names = ['register_dialog', 'register_dialog_main_vbox',
                     'register_progressbar', 'register_details_label',
                     'cancel_button', 'register_button', 'progress_label',
-                    'dialog_vbox6', 'infobar']
+                    'dialog_vbox6', 'infobar', 'content_area']
 
     gui_file = "register_dialog"
     __gtype_name__ = 'RegisterDialog'
@@ -497,10 +494,9 @@ class RegisterDialog(widgets.SubmanBaseWidget):
         # all widgets are cleared.
         self.register_widget.initialize()
 
-        self.register_dialog_main_vbox.pack_start(self.register_widget.register_widget,
-                                                  True, True, 0)
+        self.content_area.pack_start(self.register_widget.register_widget,
+                                     True, True, 0)
 
-        self.infobar.hide()
         self.infobar.set_message_type(ga_Gtk.MessageType.ERROR)
         self.infobar_content = self.infobar.get_content_area()
         # a RegisterError with property for label?
@@ -1334,6 +1330,7 @@ class RefreshSubscriptionsScreen(NoGuiScreen):
 class ChooseServerScreen(Screen):
     widget_names = Screen.widget_names + ['server_entry', 'proxy_frame',
                                           'default_button', 'choose_server_label',
+                                          'network_config_expander',
                                           'activation_key_checkbox']
     gui_file = "choose_server"
 
@@ -1343,27 +1340,25 @@ class ChooseServerScreen(Screen):
 
         self.button_label = _("Next")
 
+        self.network_config_widget_obj = networkConfig.NetworkConfigWidget()
+        self.network_config = self.network_config_widget_obj.proxy_config_widget
+        # bump the widget over so it appears to be 'indented' from the expander
+        self.network_config.set_margin_start(20)
+        self.network_config_expander.add(self.network_config)
+        self.network_config_widget_obj.infobar.set_visible(False)
+
         callbacks = {
-                "on_default_button_clicked": self._on_default_button_clicked,
-                "on_proxy_button_clicked": self._on_proxy_button_clicked,
+                "on_default_button_clicked": self._on_default_button_clicked
             }
 
         self.connect_signals(callbacks)
 
-        self.network_config_dialog = networkConfig.NetworkConfigDialog()
+        #self.network_config_dialog = networkConfig.NetworkConfigDialog()
 
     def _on_default_button_clicked(self, widget):
         # Default port and prefix are fine, so we can be concise and just
         # put the hostname for RHN:
         self.server_entry.set_text(config.DEFAULT_HOSTNAME)
-
-    def _on_proxy_button_clicked(self, widget):
-        # proxy dialog may attempt to resolve proxy and server names, so
-        # bump the resolver as well.
-        self.reset_resolver()
-
-        self.network_config_dialog.set_parent_window(self._parent.parent_window)
-        self.network_config_dialog.show()
 
     def reset_resolver(self):
         try:
