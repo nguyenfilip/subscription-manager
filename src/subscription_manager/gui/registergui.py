@@ -410,6 +410,10 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                           self._on_connection_info_change)
         self.info.connect("notify::activation-keys",
                           self._on_activation_keys_change)
+        self.info.connect('notify::details-label-txt',
+                          self._on_details_label_txt_change)
+        self.info.connect('notify::register-state',
+                          self._on_register_state_change)
 
         # expect this to be driving from the parent dialog
         self.connect('proceed',
@@ -417,12 +421,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         # FIXME: change glade name
         self.details_label = self.register_details_label
-
-        # update widgets if the values change
-        self.connect('notify::details-label-txt',
-                     self._on_details_label_txt_change)
-        self.connect('notify::register-state',
-                     self._on_register_state_change)
 
         # To update the 'next/register' button in the parent dialog based on the new page
         self.register_notebook.connect('switch-page',
@@ -480,6 +478,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         log.debug("RegisterWidget.initialize")
         self.set_initial_screen()
         self.clear_screens()
+        # TODO: move this so it's only running when a progress bar is "active"
         self.timer = ga_GObject.timeout_add(100, self._timeout_callback)
         self.register_widget.show_all()
 
