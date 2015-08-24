@@ -118,7 +118,7 @@ def reset_resolver():
 
 
 class RegisterInfo(ga_GObject.GObject):
-
+    # auth info
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
 
@@ -438,7 +438,13 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         # TODO: current_screen as a gobject property
         for idx, screen_class in enumerate(screen_classes):
-            screen = screen_class(parent=self)
+            screen = screen_class(reg_info=self.info,
+                                  async_backend=self.async,
+                                  facts=facts,
+                                  parent_window=self.parent_window)
+
+            # add the index of the screen in self._screens to the class itself
+            screen.screens_index = idx
 
             # connect handlers to various screen signals. The screens are
             # Gobjects not gtk widgets, so they can't propagate normally.
@@ -449,9 +455,6 @@ class RegisterWidget(widgets.SubmanBaseWidget):
                            self._on_screen_register_finished)
             screen.connect('attach-finished',
                            self._on_screen_attach_finished)
-
-            # add the index of the screen in self._screens to the class itself
-            screen.screens_index = idx
 
             self._screens.append(screen)
 
