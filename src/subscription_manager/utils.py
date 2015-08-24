@@ -291,6 +291,8 @@ def restart_virt_who():
     except ValueError:
         # The file has non numeric data in it
         log.error("The virt-who pid file contains non numeric data")
+    # For use as a idle_add method
+    return False
 
 
 def friendly_join(items):

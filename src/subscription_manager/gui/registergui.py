@@ -81,12 +81,13 @@ CREDENTIALS_PAGE = 2
 OWNER_SELECT_PAGE = 3
 ENVIRONMENT_SELECT_PAGE = 4
 PERFORM_REGISTER_PAGE = 5
-SELECT_SLA_PAGE = 6
-CONFIRM_SUBS_PAGE = 7
-PERFORM_SUBSCRIBE_PAGE = 8
-REFRESH_SUBSCRIPTIONS_PAGE = 9
-INFO_PAGE = 10
-DONE_PAGE = 11
+UPLOAD_PACKAGE_PROFILE_PAGE = 6
+SELECT_SLA_PAGE = 7
+CONFIRM_SUBS_PAGE = 8
+PERFORM_SUBSCRIBE_PAGE = 9
+REFRESH_SUBSCRIPTIONS_PAGE = 10
+INFO_PAGE = 11
+DONE_PAGE = 12
 FINISH = 100
 
 REGISTER_ERROR = _("<b>Unable to register the system.</b>") + \
@@ -146,6 +147,10 @@ class RegisterInfo(ga_GObject.GObject):
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
 
+    __gsignals__ = {'identity-updated': (ga_GObject.SignalFlags.RUN_FIRST,
+                                          None, [])
+                    }
+
     # TODO: make a gobj prop as well, with custom set/get, so we can be notified
     @property
     def identity(self):
@@ -154,6 +159,13 @@ class RegisterInfo(ga_GObject.GObject):
 
     def __init__(self):
         ga_GObject.GObject.__init__(self)
+
+    # TODO: signals and default handlers for 'identity-reloaded' ?
+    #       Would give a better place to hook restart_virt_who() to
+    # TODO: D-bus for virt-who?
+    def do_identity_updated(self):
+        # Can this block?
+        ga_GObject.idle_add(restart_virt_who)
 
 
 class RegisterWidget(widgets.SubmanBaseWidget):
@@ -230,8 +242,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
                           EnvironmentScreen, PerformRegisterScreen,
-                          SelectSLAScreen, ConfirmSubscriptionsScreen,
-                          PerformSubscribeScreen, RefreshSubscriptionsScreen,
+                          PerformPackageProfileSyncScreen, SelectSLAScreen,
+                          ConfirmSubscriptionsScreen, PerformSubscribeScreen,
+                          RefreshSubscriptionsScreen,
                           InfoScreen, DoneScreen]
         self._screens = []
 
@@ -407,6 +420,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # extract any info from the widgets and call the screens apply
     def apply_current_screen(self):
         self._screens[self._current_screen].apply()
+
+    def _on_screen_identity_reloaded(self, obj):
+        self.emit('identity-reloaded')
 
     # A 'register-finished' signal emitted from one of our Screens, indicating
     # that we are finished with registration (either completly, or because it's
@@ -696,7 +712,7 @@ class PerformRegisterScreen(NoGuiScreen):
     def __init__(self, reg_info, async_backend, facts, parent_window):
         super(PerformRegisterScreen, self).__init__(reg_info, async_backend, facts, parent_window)
 
-    def _on_registration_finished_cb(self, new_account, error=None):
+    def _on_registration_finished_cb(self, new_consumer, error=None):
         if error is not None:
             self.emit('register-error',
                       REGISTER_ERROR,
@@ -708,23 +724,44 @@ class PerformRegisterScreen(NoGuiScreen):
         self.emit('register-finished')
 
         try:
-            managerlib.persist_consumer_cert(new_account)
-
-            # FIXME
-            # trigger a id cert reload
-            self.emit('identity-updated')
-
-            if self.info.get_property('activation-keys'):
-                self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
-                return
-            elif self.info.get_property('skip-auto-bind'):
-                return
-            else:
-                self.emit('move-to-screen', SELECT_SLA_PAGE)
-                return
+            managerlib.persist_consumer_cert(new_consumer)
         except Exception, e:
-            # hint: register error, back to creds?
+            self.emit('register-error',
+                      _('Error persisting consumer certificate.'),
+                      e)
+            return
+
+        log.debug("Before identity reload")
+        # Load the id cert again
+        # TODO: this try/except/emit/return might be a candidate
+        #       for a error handling context manager
+        try:
+            require(IDENTITY).reload()
+        except Exception, e:
+            self.emit('register-error',
+                      _('Error reloading consumer certificate.'),
+                      e)
+            return
+
+        # FIXME
+        # trigger a id cert reload
+        self.info.emit('identity-updated')
+
+        log.debug("Before async.update()")
+        try:
+            # hmm, how to verify self.backend is using the
+            # new auth? This blocks, so we should be okay
+            # before we move to a new screen and run a
+            # thread in pre()
+            self.async.update()
+        except Exception, e:
             self.emit('register-error', REGISTER_ERROR, e)
+            return
+
+        log.debug("before move-to-screen")
+        # package profile upload is the second half of register
+        self.emit('move-to-screen', UPLOAD_PACKAGE_PROFILE_PAGE)
+        return
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
@@ -742,25 +779,46 @@ class PerformRegisterScreen(NoGuiScreen):
 
 
 class PerformPackageProfileSyncScreen(NoGuiScreen):
-    screen_enum = PERFORM_REGISTER_PAGE
+    screen_enum = UPLOAD_PACKAGE_PROFILE_PAGE
 
     def __init__(self, reg_info, async_backend, facts, parent_window):
         super(PerformPackageProfileSyncScreen, self).__init__(reg_info, async_backend, facts, parent_window)
         self.pre_message = _("Uploading package profile")
 
-    def _on_update_package_profile_finished_cb(self, result, error):
+    def _on_update_package_profile_finished_cb(self, result, error=None):
         if error is not None:
             log.debug("_on_update_package_profile_finished_cb result=%s error=%s",
                       result, error)
             self.emit('register-error',
                       REGISTER_ERROR,
                       error)
+            # Allow failure on package profile uploads
+            self.emit('move-to-screen', SELECT_SLA_PAGE)
             return
+
+        try:
+            if self.info.get_property('activation-keys'):
+                self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
+                return
+            elif self.info.get_property('skip-auto-bind'):
+                return
+            # Or more likely, the server doesn't support package profile updates
+            # so we got a result of 0 and no error
+            else:
+                log.debug("About to move-to-screen SELECT_SLA_PAGE")
+                self.emit('move-to-screen', SELECT_SLA_PAGE)
+                return
+        except Exception, e:
+            self.emit('register-error', REGISTER_ERROR, e)
+            return
+
+        log.debug("did we go anywhere?")
         return
 
     def pre(self):
         self.async.update_package_profile(self.info.identity.uuid,
-                                          self._on_subscribing_finished_cb)
+                                          self._on_update_package_profile_finished_cb)
+        return True
 
 
 class PerformSubscribeScreen(NoGuiScreen):
@@ -1489,42 +1547,41 @@ class AsyncBackend(object):
             # TODO: not sure why we pass in a facts.Facts, and call it's
             #       get_facts() three times. The two bracketing plugin calls
             #       are meant to be able to enhance/tweak facts
+            # main
             self.plugin_manager.run("pre_register_consumer", name=name,
                                     facts=facts.get_facts())
 
             cp = self.backend.cp_provider.get_basic_auth_cp()
+            # thread
             retval = cp.registerConsumer(name=name, facts=facts.get_facts(),
                                          owner=owner, environment=env,
                                          keys=activation_keys,
-                                          installed_products=installed_mgr.format_for_server())
+                                         installed_products=installed_mgr.format_for_server())
 
+            # main
             self.plugin_manager.run("post_register_consumer", consumer=retval,
                                     facts=facts.get_facts())
 
-            require(IDENTITY).reload()
+            # TODO: move these to either main thread, or go
+            #       further and spin a thread for facts cache
+            #       and installed_mgr write cache
             # Facts and installed products went out with the registration
             # request, manually write caches to disk:
             facts.write_cache()
             installed_mgr.write_cache()
 
-            cp = self.backend.cp_provider.get_basic_auth_cp()
+            self.queue.put((callback, retval, None))
+        except Exception:
+            self.queue.put((callback, None, sys.exc_info()))
 
-            # In practice, the only time this condition should be true is
-            # when we are working with activation keys.  See BZ #888790.
-            if not self.backend.cp_provider.get_basic_auth_cp().username and \
-                not self.backend.cp_provider.get_basic_auth_cp().password:
-                # Write the identity cert to disk
-                managerlib.persist_consumer_cert(retval)
-                self.backend.update()
-                cp = self.backend.cp_provider.get_consumer_auth_cp()
+    def _update_package_profile(self, uuid, callback):
+        try:
+            cp = self.backend.cp_provider.get_consumer_auth_cp()
 
-            # FIXME: this looks like we are updating package profile as
-            #        basic auth
+            # NOTE: profile update is using consumer auth with the
+            # new_consumer identity cert, not basic auth as before.
             profile_mgr = require(PROFILE_MANAGER)
-            profile_mgr.update_check(cp, retval['uuid'])
-
-            # We have new credentials, restart virt-who
-            restart_virt_who()
+            retval = profile_mgr.update_check(cp, uuid)
 
             self.queue.put((callback, retval, None))
         except Exception:
@@ -1676,6 +1733,12 @@ class AsyncBackend(object):
                          name="RegisterConsumerThread",
                          args=(name, facts, owner,
                                env, activation_keys, callback)).start()
+
+    def update_package_profile(self, uuid, callback):
+        ga_GObject.idle_add(self._watch_thread)
+        threading.Thread(target=self._update_package_profile,
+                         name="UpdatePackageProfileThread",
+                         args=(uuid, callback)).start()
 
     def subscribe(self, uuid, current_sla, dry_run_result, callback):
         ga_GObject.idle_add(self._watch_thread)
