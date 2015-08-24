@@ -741,6 +741,28 @@ class PerformRegisterScreen(NoGuiScreen):
         return True
 
 
+class PerformPackageProfileSyncScreen(NoGuiScreen):
+    screen_enum = PERFORM_REGISTER_PAGE
+
+    def __init__(self, reg_info, async_backend, facts, parent_window):
+        super(PerformPackageProfileSyncScreen, self).__init__(reg_info, async_backend, facts, parent_window)
+        self.pre_message = _("Uploading package profile")
+
+    def _on_update_package_profile_finished_cb(self, result, error):
+        if error is not None:
+            log.debug("_on_update_package_profile_finished_cb result=%s error=%s",
+                      result, error)
+            self.emit('register-error',
+                      REGISTER_ERROR,
+                      error)
+            return
+        return
+
+    def pre(self):
+        self.async.update_package_profile(self.info.identity.uuid,
+                                          self._on_subscribing_finished_cb)
+
+
 class PerformSubscribeScreen(NoGuiScreen):
     screen_enum = PERFORM_SUBSCRIBE_PAGE
 
