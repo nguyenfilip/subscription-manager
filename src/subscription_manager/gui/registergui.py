@@ -118,7 +118,7 @@ def reset_resolver():
 
 
 class RegisterInfo(ga_GObject.GObject):
-    # auth info
+
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
 
