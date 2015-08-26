@@ -19,8 +19,10 @@ sys.path.append("/usr/share/rhsm")
 
 # rhsm_login init the injector before we are loaded
 from subscription_manager import injection as inj
-
 from subscription_manager.i18n import configure_i18n
+
+from firstboot import module
+from firstboot import constants
 
 configure_i18n(with_glade=True)
 
@@ -28,23 +30,12 @@ configure_i18n(with_glade=True)
 # next in a couple places.
 NUM_RHSM_SCREENS = 4
 
-try:
-    _version = "el6"
-    from firstboot.constants import RESULT_SUCCESS, RESULT_FAILURE, RESULT_JUMP
-    from firstboot.module import Module
-except Exception:
-    # we must be on el5
-    _version = "el5"
-    from firstboot_module_window import FirstbootModuleWindow
+#from firstboot.constants import RESULT_SUCCESS, RESULT_FAILURE, RESULT_JUMP
+#from firstboot.module import Module
+ParentClass = Module
 
 
-if _version == "el5":
-    ParentClass = FirstbootModuleWindow
-else:
-    ParentClass = Module
-
-
-class RhsmFirstbootModule(ParentClass):
+class RhsmFirstbootModule(module.Module):
 
     def __init__(self, title, sidebar_title, priority, compat_priority):
         ParentClass.__init__(self)
@@ -104,19 +95,3 @@ class RhsmFirstbootModule(ParentClass):
         identity = inj.require(inj.IDENTITY)
         return not identity.is_valid()
 
-    ##############################
-    # el5 compat functions follow
-    ##############################
-
-    def launch(self, doDebug=None):
-        self.createScreen()
-        return self.vbox, self.icon, self.windowTitle
-
-    def passInParent(self, parent):
-        self.compat_parent = parent
-
-        self.register_button = parent.nextButton
-        self.cancel_button = parent.backButton
-
-    def grabFocus(self):
-        self.initializeUI()

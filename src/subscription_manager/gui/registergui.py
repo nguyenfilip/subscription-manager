@@ -122,7 +122,7 @@ def reset_resolver():
 
 
 class RegisterInfo(ga_GObject.GObject):
-    # auth info
+    
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
 
@@ -186,6 +186,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         self.backend = backend
         self.identity = require(IDENTITY)
+        self.facts = facts
 
         self.async = AsyncBackend(self.backend)
 
@@ -236,33 +237,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         # TODO: current_screen as a gobject property
         for idx, screen_class in enumerate(screen_classes):
-            screen = screen_class(reg_info=self.info,
-                                  async_backend=self.async,
-                                  facts=facts,
-                                  parent_window=self.parent_window)
-
-            # add the index of the screen in self._screens to the class itself
-            screen.screens_index = idx
-
-            # connect handlers to various screen signals. The screens are
-            # Gobjects not gtk widgets, so they can't propagate normally.
-            screen.connect('move-to-screen', self._on_move_to_screen)
-            screen.connect('stay-on-screen', self._on_stay_on_screen)
-            screen.connect('register-error', self._on_screen_register_error)
-            screen.connect('register-finished',
-                           self._on_screen_register_finished)
-            screen.connect('attach-finished',
-                           self._on_screen_attach_finished)
-
-            self._screens.append(screen)
-
-            # Some screens have no gui controls, they just use the
-            # PROGRESS_PAGE, so the indexes to the register_notebook's pages and
-            # to self._screen differ
-            if screen.needs_gui:
-                # screen.index is the screens index in self.register_notebook
-                screen.index = self.register_notebook.append_page(
-                        screen.container, tab_label=None)
+			self.add_screen(idx, screen_class)
 
         self._current_screen = None
 
@@ -273,6 +248,35 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         self.callbacks = []
 
         self.register_widget.show()
+
+    def add_screen(self, idx, screen_class):
+        screen = screen_class(reg_info=self.info,
+							  async_backend=self.async,
+							  facts=self.facts,
+							  parent_window=self.parent_window)
+
+        # add the index of the screen in self._screens to the class itself
+        screen.screens_index = idx
+
+        # connect handlers to various screen signals. The screens are
+        # Gobjects not gtk widgets, so they can't propagate normally.
+        screen.connect('move-to-screen', self._on_move_to_screen)
+        screen.connect('stay-on-screen', self._on_stay_on_screen)
+        screen.connect('register-error', self._on_screen_register_error)
+        screen.connect('register-finished',
+                       self._on_screen_register_finished)
+        screen.connect('attach-finished',
+                       self._on_screen_attach_finished)
+
+        self._screens.append(screen)
+
+        # Some screens have no gui controls, they just use the
+        # PROGRESS_PAGE, so the indexes to the register_notebook's pages and
+        # to self._screen differ
+        if screen.needs_gui:
+			# screen.index is the screens index in self.register_notebook
+            screen.index = self.register_notebook.append_page(screen.container,
+                                                              tab_label=None)
 
     def initialize(self):
         self.set_initial_screen()
