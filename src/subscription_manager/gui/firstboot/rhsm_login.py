@@ -43,7 +43,7 @@ from subscription_manager.facts import Facts
 from subscription_manager.hwprobe import Hardware
 from subscription_manager.gui import managergui
 from subscription_manager.gui import registergui
-from subscription_manager.gui.utils import handle_gui_exception
+from subscription_manager.gui.utils import handle_gui_exception, format_exception
 from subscription_manager.gui.autobind import \
         ServiceLevelNotSupportedException, NoProductsException, \
         AllProductsCoveredException
@@ -265,9 +265,9 @@ class moduleClass(module.Module, object):
         self.interface = None
 
         self.proxies_were_enabled_from_gui = None
-        self._apply_result = self._RESULT_FAILURE
+        self._apply_result = constants.RESULT_FAILURE
 
-	self.finished = False
+	self.page_status = constants.RESULT_FAILURE
 
 
     def apply(self, interface, testing=False):
@@ -276,15 +276,17 @@ class moduleClass(module.Module, object):
         provided user credentials and return the appropriate result
         value.
         """
-
+	log.debug("interface=%s, page_status=%s", interface, self.page_status)
         self.interface = interface
 
 	self.register_widget.emit('proceed')
 
-	if self.finished:
-	    return constants.RESULT_SUCCESS
+	log.debug("post emit")
+        #while ga_Gtk.events_pending():
+        #    ga_Gtk.main_iteration()
 
-	return constants.RESULT_JUMP 
+	log.debug("post iteration")
+	return self.page_status
         # bad proxy settings can cause socket.error or friends here
         # see bz #810363
 #        try:
@@ -296,8 +298,6 @@ class moduleClass(module.Module, object):
 
         # run main_iteration till we have no events, like idle
         # loop sources, aka, the thread watchers are finished.
-#        while ga_Gtk.events_pending():
-#            ga_Gtk.main_iteration()
 
 #        if valid_registration:
 #            self._cached_credentials = self._get_credentials_hash()
@@ -312,14 +312,14 @@ class moduleClass(module.Module, object):
         Create a new instance of gtk.VBox, pulling in child widgets from the
         glade file.
         """
-	log.debug("createScreen %s", self)
         self.vbox = ga_Gtk.VBox()
-        log.debug("self.vbox %s", self.vbox)
 	#self.vbox.pack_start(self.get_widget("register_widget"), False, False, 0)
         self.vbox.pack_start(self.register_widget.register_widget, False, False, 0)
 
         self.register_widget.connect('finished', self.on_finished)
-        # Get rid of the 'register' and 'cancel' buttons, as we are going to
+        self.register_widget.connect('register-error', self.on_register_error)
+	self.register_widget.register_notebook.connect('switch-page', self.on_switch_page)
+	# Get rid of the 'register' and 'cancel' buttons, as we are going to
         # use the 'forward' and 'back' buttons provided by the firsboot module
         # to drive the same functionality
         #self._destroy_widget('register_button')
@@ -332,8 +332,28 @@ class moduleClass(module.Module, object):
             screen = self._screens[registergui.CHOOSE_SERVER_PAGE]
             screen.proxy_frame.destroy()
     
+    def on_register_error(self, obj, msg, exc_list):                             
+        log.debug("register_dialog.on_register_error obj=%s msg=%s exc_list=%s", 
+                  obj, msg, exc_list)                                            
+                                                                                 
+	self.page_status = constants.RESULT_FAILURE
+        # TODO: we can add the register state, error type (error or exc)         
+        if exc_list:                                                             
+            self.handle_register_exception(obj, msg, exc_list)                   
+        else:                                                                    
+            self.handle_register_error(obj, msg)                                 
+        return True                                                              
+
     def on_finished(self, obj):
+	log.debug("on_finished obj=%s page_status=%s", obj, self.page_status)
 	self.finished = True
+	self.page_status = constants.RESULT_SUCCESS
+	log.debug("on_finished(end) obj=%s page_status=%s", obj, self.page_status)
+        return False
+
+    def on_switch_page(self, notebook, page, page_num):
+	log.debug("on_switch_page page=%s page_num=%s", page, page_num)
+        return True
 
     def focus(self):
         """
@@ -366,7 +386,6 @@ class moduleClass(module.Module, object):
         return False
     
     def renderModule(self, interface):
-	log.debug("renderModule, %s", self)
         #ParentClass.renderModule(self, interface)
 
 	# firstboot module class docs state to not override renderModule,
@@ -388,7 +407,6 @@ class moduleClass(module.Module, object):
         title_label.set_line_wrap(True)
         title_label.connect('size-allocate',
                              lambda label, size: label.set_size_request(size.width - 1, -1))
-   	log.debug("end of renderModule")
 	 
     def shouldAppear(self):
         """
@@ -402,7 +420,25 @@ class moduleClass(module.Module, object):
 ############################################
 # Everything below here is implementation  # 
 ############################################
+                                                                                 
+    def handle_register_error(self, obj, msg):                                   
+        self.error_dialog(msg)                                              
+                                                                                 
+        # RegisterWidget.do_register_error() will take care of changing screens  
+                                                                                 
+    def handle_register_exception(self, obj, msg, exc_info):                     
+        message = format_exception(exc_info, msg)                                
+        self.error_dialog(message)                                          
 
+    def error_dialog(self, text):
+        dlg = ga_Gtk.MessageDialog(None, 0, ga_Gtk.MessageType.ERROR,
+                                   ga_Gtk.ButtonsType.OK, text)
+        dlg.set_markup(text)
+	dlg.set_position(ga_Gtk.WindowPosition.CENTER)
+        #dlg.connect('::response', dlg.destroy)
+	#dlg.set_modal(True)
+        rc = dlg.run()
+        log.debug("dlg rc=%s", rc)
 
     def _add_our_screens(self, backend, reg_info):
         #insert our new screens
