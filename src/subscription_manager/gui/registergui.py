@@ -720,8 +720,6 @@ class PerformRegisterScreen(NoGuiScreen):
             # TODO: register state
             return
 
-        # Done with the registration stuff, now on to attach
-        self.emit('register-finished')
 
         try:
             managerlib.persist_consumer_cert(new_consumer)
@@ -758,7 +756,20 @@ class PerformRegisterScreen(NoGuiScreen):
             self.emit('register-error', REGISTER_ERROR, e)
             return
 
+        self.async.backend.cs.force_cert_check()
+
+        # Done with the registration stuff, now on to attach
+        self.emit('register-finished')
+
         log.debug("before move-to-screen")
+
+        # This should be triggered by a 'cert-persisted' signal, or
+        # notify signals on identity.
+        #
+        # or a 'persist-cert-and-load-identity-screen/state' between
+        # this screen and the next. That would be a clean line between
+        # not-registered, and registered.
+        #
         # package profile upload is the second half of register
         self.emit('move-to-screen', UPLOAD_PACKAGE_PROFILE_PAGE)
         return
@@ -924,8 +935,11 @@ class SelectSLAScreen(Screen):
         self.button_label = _("Next")
 
     def set_model(self, unentitled_prod_certs, sla_data_map):
-        self.product_list_label.set_text(
-                self._format_prods(unentitled_prod_certs))
+        log.debug("select_sla_screen.set_model unent=%s", unentitled_prod_certs)
+        txt = self._format_prods(unentitled_prod_certs)
+        log.debug("format_prods txt=%s", txt)
+        self.product_list_label.set_text(txt)
+
         group = None
         # reverse iterate the list as that will most likely put 'None' last.
         # then pack_start so we don't end up with radio buttons at the bottom
@@ -1007,6 +1021,10 @@ class SelectSLAScreen(Screen):
 
         (current_sla, unentitled_products, sla_data_map) = result
 
+        log.debug("current_sla=%s", current_sla)
+        log.debug("unentitled_products=%s", unentitled_products)
+        log.debug("sla_data_map=%s", sla_data_map)
+
         self.info.set_property('current-sla', current_sla)
 
         if len(sla_data_map) == 1:
@@ -1048,6 +1066,7 @@ class SelectSLAScreen(Screen):
         self.info.set_property('register-state', SUBSCRIBING)
         self.info.identity.reload()
 
+        self.async.update()
         self.async.find_service_levels(self.info.identity.uuid,
                                        self.facts,
                                        self._on_get_service_levels_cb)
@@ -1674,6 +1693,8 @@ class AsyncBackend(object):
         # eek, in a thread
         action_client = ActionClient(facts=facts)
         action_client.update()
+
+        log.debug("unent prods=%s", self.backend.cs.unentitled_products)
 
         for sla in available_slas:
 
