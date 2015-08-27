@@ -102,7 +102,7 @@ class WindowPosition(object):
     MOUSE = WIN_POS_MOUSE
     CENTER = WIN_POS_CENTER
     CENTER_ON_PARENT = WIN_POS_CENTER_ON_PARENT
-    
+
 
 class GaImage(Image):
     """A subclass of Gtk.Image that provides a Gtk3 style constructor."""

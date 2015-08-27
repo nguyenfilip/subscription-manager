@@ -122,7 +122,7 @@ def reset_resolver():
 
 
 class RegisterInfo(ga_GObject.GObject):
-    
+
     username = ga_GObject.property(type=str, default='')
     password = ga_GObject.property(type=str, default='')
 
@@ -237,7 +237,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
         # TODO: current_screen as a gobject property
         for idx, screen_class in enumerate(screen_classes):
-			self.add_screen(idx, screen_class)
+            self.add_screen(idx, screen_class)
 
         self._current_screen = None
 
@@ -251,9 +251,9 @@ class RegisterWidget(widgets.SubmanBaseWidget):
 
     def add_screen(self, idx, screen_class):
         screen = screen_class(reg_info=self.info,
-							  async_backend=self.async,
-							  facts=self.facts,
-							  parent_window=self.parent_window)
+                              async_backend=self.async,
+                              facts=self.facts,
+                              parent_window=self.parent_window)
 
         # add the index of the screen in self._screens to the class itself
         screen.screens_index = idx
@@ -274,7 +274,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         # PROGRESS_PAGE, so the indexes to the register_notebook's pages and
         # to self._screen differ
         if screen.needs_gui:
-			# screen.index is the screens index in self.register_notebook
+            # screen.index is the screens index in self.register_notebook
             screen.index = self.register_notebook.append_page(screen.container,
                                                               tab_label=None)
 
