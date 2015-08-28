@@ -704,27 +704,34 @@ class PerformRegisterScreen(NoGuiScreen):
             # TODO: register state
             return
 
-        # Done with the registration stuff, now on to attach
-        self.emit('register-finished')
-
         try:
             managerlib.persist_consumer_cert(new_account)
-
-            # FIXME
-            # trigger a id cert reload
-            self.emit('identity-updated')
-
-            if self.info.get_property('activation-keys'):
-                self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
-                return
-            elif self.info.get_property('skip-auto-bind'):
-                return
-            else:
-                self.emit('move-to-screen', SELECT_SLA_PAGE)
-                return
         except Exception, e:
             # hint: register error, back to creds?
             self.emit('register-error', REGISTER_ERROR, e)
+            return
+
+        # trigger a id cert reload
+        self.emit('identity-updated')
+
+        # Force all the cert dir backends to update, but mostly
+        # force the identity cert monitor to run, which will
+        # also update Backend. It also blocks until the new
+        # identity is reloaded, so we don't start the selectSLA
+        # screen before it.
+        self.async.backend.cs.force_cert_check()
+
+        # Done with the registration stuff, now on to attach
+        self.emit('register-finished')
+
+        if self.info.get_property('activation-keys'):
+            self.emit('move-to-screen', REFRESH_SUBSCRIPTIONS_PAGE)
+            return
+        elif self.info.get_property('skip-auto-bind'):
+            return
+        else:
+            self.emit('move-to-screen', SELECT_SLA_PAGE)
+            return
 
     def pre(self):
         log.info("Registering to owner: %s environment: %s" %
