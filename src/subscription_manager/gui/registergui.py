@@ -22,6 +22,7 @@ import re
 import socket
 import sys
 import threading
+import pprint
 
 from subscription_manager.ga import Gtk as ga_Gtk
 from subscription_manager.ga import GObject as ga_GObject
@@ -34,8 +35,7 @@ from subscription_manager.branding import get_branding
 from subscription_manager.action_client import ActionClient
 from subscription_manager.gui import networkConfig
 from subscription_manager.gui import widgets
-from subscription_manager.injection import IDENTITY, PLUGIN_MANAGER, require, \
-        INSTALLED_PRODUCTS_MANAGER, PROFILE_MANAGER
+from subscription_manager import injection as inj
 from subscription_manager import managerlib
 from subscription_manager.utils import is_valid_server_info, MissingCaCertException, \
         parse_server_info, restart_virt_who
@@ -49,10 +49,6 @@ from subscription_manager.jsonwrapper import PoolWrapper
 _ = lambda x: gettext.ldgettext("rhsm", x)
 
 gettext.textdomain("rhsm")
-
-#Gtk.glade.bindtextdomain("rhsm")
-
-#Gtk.glade.textdomain("rhsm")
 
 log = logging.getLogger('rhsm-app.' + __name__)
 
@@ -81,13 +77,14 @@ CREDENTIALS_PAGE = 2
 OWNER_SELECT_PAGE = 3
 ENVIRONMENT_SELECT_PAGE = 4
 PERFORM_REGISTER_PAGE = 5
-UPLOAD_PACKAGE_PROFILE_PAGE = 6
-SELECT_SLA_PAGE = 7
-CONFIRM_SUBS_PAGE = 8
-PERFORM_SUBSCRIBE_PAGE = 9
-REFRESH_SUBSCRIPTIONS_PAGE = 10
-INFO_PAGE = 11
-DONE_PAGE = 12
+RELOAD_CONSUMER_PAGE = 6
+UPLOAD_PACKAGE_PROFILE_PAGE = 7
+SELECT_SLA_PAGE = 8
+CONFIRM_SUBS_PAGE = 9
+PERFORM_SUBSCRIBE_PAGE = 10
+REFRESH_SUBSCRIPTIONS_PAGE = 11
+INFO_PAGE = 12
+DONE_PAGE = 13
 FINISH = 100
 
 REGISTER_ERROR = _("<b>Unable to register the system.</b>") + \
@@ -157,7 +154,7 @@ class RegisterInfo(ga_GObject.GObject):
     # TODO: make a gobj prop as well, with custom set/get, so we can be notified
     @property
     def identity(self):
-        id = require(IDENTITY)
+        id = inj.require(inj.IDENTITY)
         return id
 
     def __init__(self):
@@ -200,7 +197,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         super(RegisterWidget, self).__init__()
 
         self.backend = backend
-        self.identity = require(IDENTITY)
+        self.identity = inj.require(inj.IDENTITY)
         self.facts = facts
 
         self.async = AsyncBackend(self.backend)
@@ -245,6 +242,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
         screen_classes = [ChooseServerScreen, ActivationKeyScreen,
                           CredentialsScreen, OrganizationScreen,
                           EnvironmentScreen, PerformRegisterScreen,
+                          ReloadConsumerScreen,
                           PerformPackageProfileSyncScreen, SelectSLAScreen,
                           ConfirmSubscriptionsScreen, PerformSubscribeScreen,
                           RefreshSubscriptionsScreen,
@@ -385,6 +383,7 @@ class RegisterWidget(widgets.SubmanBaseWidget):
     # callback is then responsible for sending the user to the right screen
     # via 'move-to-screen' signal.
     def change_screen(self, next_screen_id):
+        log.debug("change_screen next_screen_id=%s", next_screen_id)
         next_screen = self._screens[next_screen_id]
 
         self._set_screen(next_screen_id)
@@ -723,7 +722,7 @@ class PerformRegisterScreen(NoGuiScreen):
             # TODO: register state
             return
 
-        self.reg_info.set_property('consumer', new_consumer)
+        self.info.set_property('consumer', new_consumer)
 
         self.emit('move-to-screen', RELOAD_CONSUMER_PAGE)
 
@@ -751,8 +750,10 @@ class ReloadConsumerScreen(NoGuiScreen):
         self.pre_message = _("Loading Consumer Identity")
 
     def pre(self):
-        new_consumer = self.reg_info.get_property('consumer')
+        log.debug("ReloadConsumerScreen.pre")
+        new_consumer = self.info.get_property('consumer')
 
+        log.debug("new_consumer=%s", new_consumer)
         # This could happen in a thread as long we reload everthing
         # from the main thread.
         try:
@@ -768,12 +769,14 @@ class ReloadConsumerScreen(NoGuiScreen):
         # TODO: this try/except/emit/return might be a candidate
         #       for a error handling context manager
         try:
-            require(IDENTITY).reload()
+            inj.require(inj.IDENTITY).reload()
         except Exception, e:
             self.emit('register-error',
                       _('Error reloading consumer certificate.'),
                       e)
             return
+
+        log.debug("post id reload")
 
         # FIXME
         # trigger a id cert reload
@@ -798,7 +801,7 @@ class ReloadConsumerScreen(NoGuiScreen):
 
         # Also, we do have a way to attach a callback to cert_sort init,
         # which we could use as an event
-        self.async.backend.cs.force_cert_check()
+        inj.require(inj.CERT_SORTER).force_cert_check()
 
         # Done with the registration stuff, now on to attach
         self.emit('register-finished')
@@ -814,7 +817,7 @@ class ReloadConsumerScreen(NoGuiScreen):
         #
         # package profile upload is the second half of register
         self.emit('move-to-screen', UPLOAD_PACKAGE_PROFILE_PAGE)
-        return
+        return False
 
 
 class PerformPackageProfileSyncScreen(NoGuiScreen):
@@ -909,6 +912,7 @@ class ConfirmSubscriptionsScreen(Screen):
         self.subs_treeview.append_column(column)
 
         self.add_text_column(_("Quantity"), 2)
+        log.debug("subs_treeview=%s", self.subs_treeview)
 
     def add_text_column(self, name, index, expand=False):
         text_renderer = ga_Gtk.CellRendererText()
@@ -935,13 +939,19 @@ class ConfirmSubscriptionsScreen(Screen):
         self.sla_label.set_markup("<b>" + dry_run_result.service_level +
                                   "</b>")
 
+        log.debug("dry_run_results=%s", dry_run_result)
+        log.debug("dry_run_result.json=%s", dry_run_result.json)
         for pool_quantity in dry_run_result.json:
-            self.store.append([pool_quantity['pool']['productName'],
-                              PoolWrapper(pool_quantity['pool']).is_virt_only(),
-                              str(pool_quantity['quantity'])])
+            pool_columns = [pool_quantity['pool']['productName'],
+                            PoolWrapper(pool_quantity['pool']).is_virt_only(),
+                            str(pool_quantity['quantity'])]
+            log.debug("pool_columns=%s", pool_columns)
+            self.store.append(pool_columns)
 
     def pre(self):
         self.set_model()
+        self.subs_treeview.set_model(self.store)
+        log.debug("end of pre")
         return False
 
 
@@ -963,9 +973,12 @@ class SelectSLAScreen(Screen):
         self.button_label = _("Next")
 
     def set_model(self, unentitled_prod_certs, sla_data_map):
-        log.debug("select_sla_screen.set_model unent=%s", unentitled_prod_certs)
+        log.debug("select_sla_screen.set_model unent=%s",
+                  unentitled_prod_certs)
+
         txt = self._format_prods(unentitled_prod_certs)
         log.debug("format_prods txt=%s", txt)
+
         self.product_list_label.set_text(txt)
 
         group = None
@@ -1047,6 +1060,8 @@ class SelectSLAScreen(Screen):
                           error)
                 return
 
+        # unentitled_products is only used for a showing a list
+        # of product names if we get multiple valid SLAs
         (current_sla, unentitled_products, sla_data_map) = result
 
         log.debug("current_sla=%s", current_sla)
@@ -1070,8 +1085,11 @@ class SelectSLAScreen(Screen):
                 self.emit('attach-finished')
                 return
 
+            # ??? sla_data_map.values() is the list of the dry_run_results
+            #  of suitable slas. There doesn't seem to be any meaning to
+            # the ordering so why is [0] used?
             self.info.set_property('dry-run-result',
-                                           sla_data_map.values()[0])
+                                   sla_data_map.values()[0])
             self.emit('move-to-screen', CONFIRM_SUBS_PAGE)
             return
         elif len(sla_data_map) > 1:
@@ -1095,6 +1113,9 @@ class SelectSLAScreen(Screen):
         self.info.identity.reload()
 
         self.async.update()
+
+        log.debug("info.consumer=%s",
+                  pprint.pformat(self.info.get_property('consumer')))
         self.async.find_service_levels(self.info.identity.uuid,
                                        self.facts,
                                        self._on_get_service_levels_cb)
@@ -1528,7 +1549,7 @@ class AsyncBackend(object):
 
     def __init__(self, backend):
         self.backend = backend
-        self.plugin_manager = require(PLUGIN_MANAGER)
+        self.plugin_manager = inj.require(inj.PLUGIN_MANAGER)
         self.queue = Queue.Queue()
 
     def update(self):
@@ -1589,7 +1610,7 @@ class AsyncBackend(object):
         method run in the worker thread.
         """
         try:
-            installed_mgr = require(INSTALLED_PRODUCTS_MANAGER)
+            installed_mgr = inj.require(inj.INSTALLED_PRODUCTS_MANAGER)
 
             # TODO: not sure why we pass in a facts.Facts, and call it's
             #       get_facts() three times. The two bracketing plugin calls
@@ -1627,7 +1648,7 @@ class AsyncBackend(object):
 
             # NOTE: profile update is using consumer auth with the
             # new_consumer identity cert, not basic auth as before.
-            profile_mgr = require(PROFILE_MANAGER)
+            profile_mgr = inj.require(inj.PROFILE_MANAGER)
             retval = profile_mgr.update_check(cp, uuid)
 
             self.queue.put((callback, retval, None))
@@ -1686,10 +1707,15 @@ class AsyncBackend(object):
     def _find_suitable_service_levels(self, consumer_uuid, facts):
 
         # FIXME:
-        self.backend.update()
+        #self.backend.update()
 
-        consumer_json = self.backend.cp_provider.get_consumer_auth_cp().getConsumer(
-                consumer_uuid)
+        cp = self.backend.cp_provider.get_consumer_auth_cp()
+        # TODO: req_info.consumer should already have this
+        # auto attach wont however. But this could get moved
+        # to a screen before selectSLA that auto attach would start
+        # at, and that registergui would skip over.
+        consumer_json = cp.getConsumer(consumer_uuid)
+        log.debug("cp.getConsumer=%s", pprint.pformat(consumer_json))
 
         if 'serviceLevel' not in consumer_json:
             raise ServiceLevelNotSupportedException()
@@ -1699,11 +1725,14 @@ class AsyncBackend(object):
         # This is often "", set to None in that case:
         current_sla = consumer_json['serviceLevel'] or None
 
-        if len(self.backend.cs.installed_products) == 0:
+        cs = inj.require(inj.CERT_SORTER)
+
+        # TODO: This seems like it should be done in CertSorter itself.
+        if len(cs.installed_products) == 0:
             raise NoProductsException()
 
-        if len(self.backend.cs.valid_products) == len(self.backend.cs.installed_products) and \
-                len(self.backend.cs.partial_stacks) == 0:
+        if len(cs.valid_products) == len(cs.installed_products) and \
+                len(cs.partial_stacks) == 0:
             raise AllProductsCoveredException()
 
         if current_sla:
@@ -1711,7 +1740,9 @@ class AsyncBackend(object):
             log.debug("Using system's current service level: %s" %
                     current_sla)
         else:
-            available_slas = self.backend.cp_provider.get_consumer_auth_cp().getServiceLevelList(owner_key)
+            # TODO: Service level is per owner, we could get that before
+            # even registering and potentially skip this entire screen
+            available_slas = cp.getServiceLevelList(owner_key)
             log.debug("Available service levels: %s" % available_slas)
 
         # Will map service level (string) to the results of the dry-run
@@ -1719,30 +1750,50 @@ class AsyncBackend(object):
         suitable_slas = {}
 
         # eek, in a thread
-        action_client = ActionClient(facts=facts)
-        action_client.update()
+        # Eeek because this is collecting a lot of client info, and
+        # then reading and writing status caches and making several rest
+        # api requests.
+        #
+        # If we are getting here post register, we've already sent a recent
+        # facts set, installed products, and package profile, and gotten a
+        # a fresh consumer object. Do we need this at all in that case?
+        # We haven't attached to anything yet, so checking for certs and
+        # updating Content seems unneeded.
 
-        log.debug("unent prods=%s", self.backend.cs.unentitled_products)
+        log.debug("running ActionClient.update")
+        #action_client = ActionClient(facts=facts)
+        #action_client.update()
+        log.debug("finished ActionClient.update")
 
+        log.debug("unent prods=%s", cs.unentitled_products)
+
+        # Would there be any utitily to making the order of available_slas
+        # meaningful? ie, The most likely first?
         for sla in available_slas:
 
             # TODO: what kind of madness would happen if we did a couple of
             # these in parallel in seperate threads?
-            dry_run_json = self.backend.cp_provider.get_consumer_auth_cp().dryRunBind(consumer_uuid, sla)
+
+            # The same cp will be valid...
+            dry_run_json = cp.dryRunBind(consumer_uuid, sla)
 
             # FIXME: are we modifying cert_sorter (self.backend.cs) state here?
             # FIXME: it's only to get the unentitled products list, can pass
             #        that in
-            dry_run = DryRunResult(sla, dry_run_json, self.backend.cs)
+            dry_run_result = DryRunResult(sla,
+                                          dry_run_json,
+                                          cs.unentitled_products)
 
             # If we have a current SLA for this system, we do not need
             # all products to be covered by the SLA to proceed through
             # this wizard:
-            if current_sla or dry_run.covers_required_products():
-                suitable_slas[sla] = dry_run
+            if current_sla or dry_run_result.covers_required_products():
+                suitable_slas[sla] = dry_run_result
 
         # why do we call cert_sorter stuff in the return?
-        return (current_sla, self.backend.cs.unentitled_products.values(), suitable_slas)
+        return (current_sla,
+                cs.unentitled_products.values(),
+                suitable_slas)
 
     def _find_service_levels(self, consumer_uuid, facts, callback):
         """
