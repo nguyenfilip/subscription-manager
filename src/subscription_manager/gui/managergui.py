@@ -126,7 +126,8 @@ class Backend(object):
     # cause cert_sorter to cert_check to cause file_monitor.Monitor to look for
     # for new certs, add this as a main loop timer callback to do that on timer.
     def on_cert_check_timer(self):
-        self.cs.force_cert_check()
+        require(CERT_SORTER).force_cert_check()
+        #self.cs.force_cert_check()
 
 
 class MainWindow(widgets.SubmanBaseWidget):
@@ -244,7 +245,7 @@ class MainWindow(widgets.SubmanBaseWidget):
             # Reset repos dialog, see bz 1132919
             self.repos_dialog = RepositoriesDialog(self.backend, self._get_window())
 
-        self.backend.cs.add_callback(on_cert_sorter_cert_change)
+        require(CERT_SORTER).add_callback(on_cert_sorter_cert_change)
 
         self.main_window.show_all()
 
@@ -253,7 +254,7 @@ class MainWindow(widgets.SubmanBaseWidget):
         self._check_rhn_classic()
 
         # Update everything with compliance data
-        self.backend.cs.notify()
+        require(CERT_SORTER).notify()
 
         # managergui needs cert_sort.cert_monitor.run_check() to run
         # on a timer to detect cert changes from outside the gui
@@ -404,7 +405,7 @@ class MainWindow(widgets.SubmanBaseWidget):
         # We have new credentials, restart virt-who
         restart_virt_who()
 
-        self.backend.cs.force_cert_check()
+        require(CERT_SORTER).force_cert_check()
 
     def _unregister_item_clicked(self, widget):
         log.info("Unregister button pressed, asking for confirmation.")
