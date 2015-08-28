@@ -26,10 +26,10 @@ log = logging.getLogger('rhsm-app.' + __name__)
 class DryRunResult(object):
     """ Encapsulates a dry-run autobind result from the server. """
 
-    def __init__(self, service_level, server_json, cert_sorter):
+    def __init__(self, service_level, server_json, unentitled_products):
         self.json = server_json
-        self.sorter = cert_sorter
         self.service_level = service_level
+        self.unentitled_products = unentitled_products
 
     def covers_required_products(self):
         """
@@ -42,7 +42,7 @@ class DryRunResult(object):
         SLA to use, the key point being you have access to the content you
         need.
         """
-        required_products = set(self.sorter.unentitled_products.keys())
+        required_products = set(self.unentitled_products.keys())
 
         # The products that would be covered if we did this autobind:
         autobind_products = set()
@@ -54,14 +54,15 @@ class DryRunResult(object):
             autobind_products.add(pool['productId'])
             for provided_prod in pool['providedProducts']:
                 autobind_products.add(provided_prod['productId'])
+
         log.debug("Autobind would give access to: %s" % autobind_products)
         if required_products.issubset(autobind_products):
             log.debug("Found valid service level: %s" % self.service_level)
             return True
-        else:
-            log.debug("Service level does not cover required products: %s" %
-                      self.service_level)
-            return False
+
+        log.debug("Service level does not cover required products: %s" %
+                  self.service_level)
+        return False
 
     def get_pool_quantities(self):
         """
