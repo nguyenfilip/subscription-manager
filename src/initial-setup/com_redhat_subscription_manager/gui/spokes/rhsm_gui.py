@@ -130,7 +130,8 @@ class RHSMSpoke(FirstbootOnlySpokeMixIn, NormalSpoke):
     def cancel(self, button):
         # TODO: clear out settings and restart?
         # TODO: attempt to undo the REST api calls we've made?
-        pass
+        self.register_widget.set_initial_screen()
+        self.register_widget.clear_screens()
 
     # A property indicating the spoke is ready to be visited. This
     # could depend on other modules or waiting for internal state to be setup.
