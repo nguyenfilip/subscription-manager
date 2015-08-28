@@ -147,6 +147,9 @@ class RegisterInfo(ga_GObject.GObject):
     details_label_txt = ga_GObject.property(type=str, default='')
     register_state = ga_GObject.property(type=int, default=REGISTERING)
 
+    # consumer identity
+    consumer = ga_GObject.property(type=ga_GObject.TYPE_PYOBJECT, default=None)
+
     __gsignals__ = {'identity-updated': (ga_GObject.SignalFlags.RUN_FIRST,
                                           None, [])
                     }
@@ -720,7 +723,38 @@ class PerformRegisterScreen(NoGuiScreen):
             # TODO: register state
             return
 
+        self.reg_info.set_property('consumer', new_consumer)
 
+        self.emit('move-to-screen', RELOAD_CONSUMER_PAGE)
+
+    def pre(self):
+        log.info("Registering to owner: %s environment: %s" %
+                 (self.info.get_property('owner-key'),
+                  self.info.get_property('environment')))
+
+        self.async.register_consumer(self.info.get_property('consumername'),
+                                     self.facts,
+                                     self.info.get_property('owner-key'),
+                                     self.info.get_property('environment'),
+                                     self.info.get_property('activation-keys'),
+                                     self._on_registration_finished_cb)
+
+        return True
+
+
+class ReloadConsumerScreen(NoGuiScreen):
+    screen_enum = RELOAD_CONSUMER_PAGE
+
+    def __init__(self, reg_info, async_backend, facts, parent_window):
+        super(ReloadConsumerScreen, self).__init__(reg_info, async_backend,
+                                                   facts, parent_window)
+        self.pre_message = _("Loading Consumer Identity")
+
+    def pre(self):
+        new_consumer = self.reg_info.get_property('consumer')
+
+        # This could happen in a thread as long we reload everthing
+        # from the main thread.
         try:
             managerlib.persist_consumer_cert(new_consumer)
         except Exception, e:
@@ -743,6 +777,7 @@ class PerformRegisterScreen(NoGuiScreen):
 
         # FIXME
         # trigger a id cert reload
+        # maybe a 'identity-created' would be more accurate
         self.info.emit('identity-updated')
 
         log.debug("Before async.update()")
@@ -756,6 +791,13 @@ class PerformRegisterScreen(NoGuiScreen):
             self.emit('register-error', REGISTER_ERROR, e)
             return
 
+        # We know we don't have new ent/product certs, but
+        # we do have a new consumer cert. So this is just forcing
+        # cert_sorter to load and populate it's info. It could
+        # move to being a pre-condition of using cert_sorter info
+
+        # Also, we do have a way to attach a callback to cert_sort init,
+        # which we could use as an event
         self.async.backend.cs.force_cert_check()
 
         # Done with the registration stuff, now on to attach
@@ -773,20 +815,6 @@ class PerformRegisterScreen(NoGuiScreen):
         # package profile upload is the second half of register
         self.emit('move-to-screen', UPLOAD_PACKAGE_PROFILE_PAGE)
         return
-
-    def pre(self):
-        log.info("Registering to owner: %s environment: %s" %
-                 (self.info.get_property('owner-key'),
-                  self.info.get_property('environment')))
-
-        self.async.register_consumer(self.info.get_property('consumername'),
-                                     self.facts,
-                                     self.info.get_property('owner-key'),
-                                     self.info.get_property('environment'),
-                                     self.info.get_property('activation-keys'),
-                                     self._on_registration_finished_cb)
-
-        return True
 
 
 class PerformPackageProfileSyncScreen(NoGuiScreen):
