@@ -5,14 +5,18 @@
   <object class="GtkBox" id="container">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
+    <property name="halign">start</property>
+    <property name="valign">start</property>
     <property name="orientation">vertical</property>
     <child>
       <object class="GtkLabel" id="label4">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="xalign">0</property>
+        <property name="halign">start</property>
+        <property name="valign">start</property>
         <property name="label" translatable="yes">&lt;b&gt;Confirm Subscriptions&lt;/b&gt;</property>
         <property name="use_markup">True</property>
+        <property name="xalign">0</property>
       </object>
       <packing>
         <property name="expand">False</property>
@@ -24,6 +28,7 @@
       <object class="GtkBox" id="vbox">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="halign">start</property>
         <property name="valign">start</property>
         <property name="orientation">vertical</property>
         <property name="spacing">12</property>
@@ -31,15 +36,22 @@
           <object class="GtkBox" id="vbox2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="halign">start</property>
+            <property name="valign">start</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkBox" id="hbox2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="halign">start</property>
+                <property name="valign">start</property>
+                <property name="resize_mode">immediate</property>
                 <child>
                   <object class="GtkLabel" id="label3">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="valign">start</property>
                     <property name="xpad">10</property>
                     <property name="label" translatable="yes">Using service level:</property>
                   </object>
@@ -53,6 +65,8 @@
                   <object class="GtkLabel" id="sla_label">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="valign">start</property>
                     <property name="label" translatable="yes">SLA</property>
                   </object>
                   <packing>
@@ -72,10 +86,12 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="xalign">0</property>
+                <property name="halign">start</property>
+                <property name="valign">start</property>
                 <property name="xpad">10</property>
                 <property name="label" translatable="yes">The following subscriptions will be attached:</property>
                 <property name="use_markup">True</property>
+                <property name="xalign">0</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -91,28 +107,30 @@
           </packing>
         </child>
         <child>
-          <placeholder/>
-        </child>
-        <child>
           <object class="GtkScrolledWindow" id="scrolledwindow1">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
+            <property name="halign">start</property>
+            <property name="valign">start</property>
             <child>
               <object class="GtkViewport" id="viewport1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="halign">start</property>
                 <property name="valign">start</property>
                 <property name="resize_mode">queue</property>
                 <child>
                   <object class="GtkBox" id="hbox1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="halign">start</property>
                     <property name="valign">start</property>
-                    <property name="orientation">vertical</property>
+                    <property name="resize_mode">immediate</property>
                     <child>
                       <object class="GtkTreeView" id="subs_treeview">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="halign">start</property>
                         <property name="valign">start</property>
                         <child internal-child="selection">
                           <object class="GtkTreeSelection" id="treeview-selection1"/>
@@ -140,16 +158,18 @@
           <packing>
             <property name="expand">True</property>
             <property name="fill">True</property>
-            <property name="position">2</property>
+            <property name="position">1</property>
           </packing>
         </child>
         <child>
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="xalign">0</property>
+            <property name="halign">start</property>
+            <property name="valign">start</property>
             <property name="xpad">10</property>
             <property name="label" translatable="yes">Core repositories will be enabled for each product.</property>
+            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
