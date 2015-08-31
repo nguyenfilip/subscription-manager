@@ -5,7 +5,6 @@
   <object class="GtkBox" id="register_widget">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="halign">center</property>
     <property name="valign">center</property>
     <property name="hexpand">True</property>
     <property name="vexpand">True</property>
@@ -14,20 +13,17 @@
       <object class="GtkNotebook" id="register_notebook">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="halign">center</property>
-        <property name="valign">center</property>
+        <property name="valign">start</property>
         <property name="hexpand">True</property>
-        <property name="vexpand">True</property>
         <property name="show_tabs">False</property>
         <property name="show_border">False</property>
         <child>
           <object class="GtkBox" id="progressVbox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="halign">center</property>
             <property name="valign">center</property>
-            <property name="margin_left">8</property>
-            <property name="margin_right">8</property>
+            <property name="margin_left">30</property>
+            <property name="margin_right">30</property>
             <property name="margin_top">4</property>
             <property name="margin_bottom">4</property>
             <property name="hexpand">True</property>
@@ -66,7 +62,6 @@
               <object class="GtkProgressBar" id="register_progressbar">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="halign">center</property>
                 <property name="valign">center</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
@@ -131,8 +126,8 @@
         </child>
       </object>
       <packing>
-        <property name="expand">False</property>
-        <property name="fill">False</property>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
         <property name="position">1</property>
       </packing>
     </child>
