@@ -135,8 +135,7 @@
         <property name="hadjustment">adjustment1</property>
         <property name="vadjustment">adjustment2</property>
         <property name="min_content_width">400</property>
-        <property name="min_content_height">100</property>
-        <property name="overlay_scrolling">False</property>
+        <property name="min_content_height">80</property>
         <child>
           <object class="GtkTreeView" id="subs_treeview">
             <property name="visible">True</property>

@@ -54,7 +54,6 @@
               <object class="GtkProgressBar" id="register_progressbar">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="opacity">0.94999999999999996</property>
                 <property name="valign">start</property>
                 <property name="pulse_step">0.25</property>
                 <child internal-child="accessible">

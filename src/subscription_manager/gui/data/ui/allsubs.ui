@@ -174,7 +174,6 @@
             <property name="can_focus">True</property>
             <property name="orientation">vertical</property>
             <property name="position_set">True</property>
-            <property name="wide_handle">True</property>
             <child>
               <object class="GtkScrolledWindow" id="scrolledwindow">
                 <property name="visible">True</property>
@@ -186,7 +185,6 @@
                 <property name="shadow_type">etched-out</property>
                 <property name="min_content_width">240</property>
                 <property name="min_content_height">120</property>
-                <property name="overlay_scrolling">False</property>
               </object>
               <packing>
                 <property name="resize">True</property>
