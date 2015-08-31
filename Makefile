@@ -619,6 +619,10 @@ find-missing-signals:
 fix-glade:
 	perl -pi -e 's/(swapped=\".*?\")//' $(GLADEFILES)
 	perl -pi -e 's/^.*property\s*name=\"orientation\">vertical.*$$//' $(GLADEFILES)
+	# Various gtk isms not supported on rhel7
+	perl -pi -e 's/^.*property\s*name=\"opacity\">.*$$//' $(GLADEFILES)
+	perl -pi -e 's/^.*property\s*name=\"overlay_scrolling\">.*$$//' $(GLADEFILES)
+	perl -pi -e 's/^.*property\s*name=\"wide_handle\">.*$$//' $(GLADEFILES)
 
 
 # look for python string formats that are known to break xgettext
