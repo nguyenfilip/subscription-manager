@@ -126,12 +126,10 @@
         <property name="visible">True</property>
         <property name="can_focus">True</property>
         <property name="margin_left">8</property>
-        <property name="margin_right">4</property>
+        <property name="margin_right">8</property>
         <property name="margin_top">4</property>
         <property name="margin_bottom">4</property>
-        <property name="hexpand">True</property>
         <property name="vexpand">True</property>
-        <property name="resize_mode">queue</property>
         <property name="hadjustment">adjustment1</property>
         <property name="vadjustment">adjustment2</property>
         <property name="min_content_width">400</property>
@@ -140,8 +138,6 @@
           <object class="GtkTreeView" id="subs_treeview">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <child internal-child="selection">
               <object class="GtkTreeSelection" id="treeview-selection"/>
             </child>

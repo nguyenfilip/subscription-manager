@@ -5,15 +5,15 @@
   <object class="GtkBox" id="container">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="halign">start</property>
     <property name="valign">start</property>
+    <property name="hexpand">True</property>
     <property name="orientation">vertical</property>
     <child>
       <object class="GtkLabel" id="label1">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="halign">start</property>
-        <property name="margin_bottom">8</property>
+        <property name="margin_bottom">4</property>
         <property name="xpad">2</property>
         <property name="ypad">2</property>
         <property name="label" translatable="yes">&lt;b&gt;Please enter the following for this system:&lt;/b&gt;</property>
@@ -36,13 +36,16 @@
       <object class="GtkGrid" id="grid1">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="halign">start</property>
         <property name="valign">start</property>
+        <property name="margin_left">4</property>
+        <property name="margin_bottom">4</property>
+        <property name="hexpand">True</property>
+        <property name="row_spacing">4</property>
         <child>
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="halign">start</property>
+            <property name="halign">end</property>
             <property name="valign">center</property>
             <property name="label" translatable="yes">Organization:</property>
             <property name="ellipsize">end</property>
@@ -57,7 +60,7 @@
           <object class="GtkLabel" id="label3">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="halign">start</property>
+            <property name="halign">end</property>
             <property name="valign">center</property>
             <property name="label" translatable="yes">Activation Key:</property>
             <property name="xalign">0</property>
@@ -71,7 +74,7 @@
           <object class="GtkLabel" id="label4">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="halign">start</property>
+            <property name="halign">end</property>
             <property name="valign">center</property>
             <property name="label" translatable="yes">System Name:</property>
             <property name="xalign">0</property>
@@ -86,12 +89,12 @@
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="tooltip_text" translatable="yes">This must be the organization key, not the name.</property>
-            <property name="halign">start</property>
             <property name="valign">start</property>
             <property name="margin_left">8</property>
-            <property name="hexpand">True</property>
+            <property name="margin_right">8</property>
             <property name="invisible_char">●</property>
             <property name="width_chars">24</property>
+            <property name="max_width_chars">64</property>
             <child internal-child="accessible">
               <object class="AtkObject" id="organization_entry-atkobject">
                 <property name="AtkObject::accessible-name" translatable="yes">organization_entry</property>
@@ -108,12 +111,12 @@
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="tooltip_text" translatable="yes">Multiple Activation Keys can be entered by separating them with a comma or a space.</property>
-            <property name="halign">start</property>
             <property name="valign">start</property>
             <property name="margin_left">8</property>
-            <property name="hexpand">True</property>
+            <property name="margin_right">8</property>
             <property name="invisible_char">●</property>
             <property name="width_chars">24</property>
+            <property name="max_width_chars">64</property>
             <child internal-child="accessible">
               <object class="AtkObject" id="activation_key_entry-atkobject">
                 <property name="AtkObject::accessible-name" translatable="yes">activation_key_entry</property>
@@ -129,12 +132,13 @@
           <object class="GtkEntry" id="consumer_entry">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
-            <property name="halign">start</property>
             <property name="valign">start</property>
             <property name="margin_left">8</property>
-            <property name="hexpand">True</property>
+            <property name="margin_right">8</property>
             <property name="invisible_char">●</property>
             <property name="width_chars">24</property>
+            <property name="max_width_chars">64</property>
+            <property name="xalign">1</property>
             <child internal-child="accessible">
               <object class="AtkObject" id="consumer_entry-atkobject">
                 <property name="AtkObject::accessible-name" translatable="yes">consumer_entry</property>
