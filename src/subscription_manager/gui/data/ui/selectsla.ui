@@ -128,8 +128,7 @@
             <property name="margin_left">8</property>
             <property name="margin_right">8</property>
             <property name="min_content_width">400</property>
-            <property name="min_content_height">120</property>
-            <property name="overlay_scrolling">False</property>
+            <property name="min_content_height">80</property>
             <child>
               <object class="GtkViewport" id="viewport1">
                 <property name="visible">True</property>
