@@ -1104,7 +1104,6 @@ class ChooseServerScreen(Screen):
         callbacks = {
                 "on_default_button_clicked": self._on_default_button_clicked,
                 "on_proxy_button_clicked": self._on_proxy_button_clicked,
-                "on_server_entry_changed": self._on_server_entry_changed,
             }
 
         self.connect_signals(callbacks)
@@ -1123,26 +1122,6 @@ class ChooseServerScreen(Screen):
 
         self.network_config_dialog.set_parent_window(self._parent.window)
         self.network_config_dialog.show()
-
-    def _on_server_entry_changed(self, widget):
-        """
-        Disable the activation key checkbox if the user is registering
-        to hosted.
-        """
-        server = self.server_entry.get_text()
-        try:
-            (hostname, port, prefix) = parse_server_info(server)
-            if re.search('subscription\.rhn\.(.*\.)*redhat\.com', hostname):
-                sensitive = False
-                self.activation_key_checkbox.set_active(False)
-            else:
-                sensitive = True
-            self.activation_key_checkbox.set_sensitive(sensitive)
-        except ServerUrlParseError:
-            # This may seem like it should be False, but we don't want
-            # the checkbox blinking on and off as the user types a value
-            # that is first unparseable and then later parseable.
-            self.activation_key_checkbox.set_sensitive(True)
 
     def reset_resolver(self):
         try:

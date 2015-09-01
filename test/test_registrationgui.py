@@ -93,13 +93,6 @@ class ChooseServerScreenTests(SubManFixture):
         self.screen.server_entry.set_text("foo.bar:443/baz")
         self.assertTrue(self.screen.activation_key_checkbox.get_property('sensitive'))
 
-    def test_activation_key_checkbox_insensitive(self):
+    def test_activation_key_checkbox_not_insensitive(self):
         self.screen.server_entry.set_text("subscription.rhn.redhat.com:443/baz")
-        self.assertFalse(self.screen.activation_key_checkbox.get_property('sensitive'))
-
-    def test_activation_key_checkbox_inactive_when_insensitive(self):
-        self.screen.server_entry.set_text("foo.bar:443/baz")
-        self.screen.activation_key_checkbox.set_active(True)
-        self.screen.server_entry.set_text("subscription.rhn.redhat.com:443/baz")
-        self.assertFalse(self.screen.activation_key_checkbox.get_property('sensitive'))
-        self.assertFalse(self.screen.activation_key_checkbox.get_property('active'))
+        self.assertTrue(self.screen.activation_key_checkbox.get_property('sensitive'))
